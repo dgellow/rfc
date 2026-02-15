@@ -182,8 +182,8 @@ export function renderReaderScreen(
     : "";
 
   const hints = state.keymap === "vim"
-    ? "j/k \u2195  Ctrl-d/u \u21c5  / search  i info  q back"
-    : "C-n/C-p \u2195  C-v/M-v \u21c5  C-s search  i info  C-g back";
+    ? "j/k \u2195  Ctrl-d/u \u21c5  / search  i info  ? help  K keymap  q back"
+    : "C-n/C-p \u2195  C-v/M-v \u21c5  C-s search  i info  ? help  K keymap  C-g back";
 
   // Scrollbar
   const scrollbarComponent: Component = {

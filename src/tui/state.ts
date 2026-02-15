@@ -1,4 +1,5 @@
 import type { SearchResult } from "../types.ts";
+import { loadConfig } from "./config.ts";
 
 export type Screen = "search" | "reader";
 export type Keymap = "vim" | "emacs";
@@ -47,8 +48,14 @@ export interface TuiState {
 }
 
 export function initialState(): TuiState {
-  const keymap =
-    (Deno.env.get("RFC_KEYMAP") === "emacs" ? "emacs" : "vim") as Keymap;
+  // Priority: env var > config file > default (vim)
+  const envKeymap = Deno.env.get("RFC_KEYMAP");
+  const config = loadConfig();
+  const keymap: Keymap = envKeymap === "emacs"
+    ? "emacs"
+    : envKeymap === "vim"
+    ? "vim"
+    : config.keymap ?? "vim";
   return {
     screen: "search",
     keymap,

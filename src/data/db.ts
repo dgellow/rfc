@@ -205,7 +205,6 @@ function parseQuery(query: string): ParsedQuery {
 }
 
 export interface SearchOptions {
-  limit?: number;
   orderBy?: "relevance" | "number_desc" | "number_asc" | "date";
 }
 
@@ -219,7 +218,6 @@ export function search(
   query: string,
   options: SearchOptions = {},
 ): SearchResponse {
-  const limit = options.limit ?? 500;
   const orderBy = options.orderBy ?? "relevance";
   const { freeText, filters } = parseQuery(query);
 
@@ -287,7 +285,6 @@ export function search(
       WHERE rfc_fts MATCH ?
       ${whereClauses.length ? "AND " + whereClauses.join(" AND ") : ""}
       ${orderClause}
-      LIMIT ?
     `;
     countSql = `
       SELECT COUNT(*) as total
@@ -298,30 +295,25 @@ export function search(
     `;
     params.unshift(ftsQuery);
     countParams.unshift(ftsQuery);
-    params.push(limit);
   } else if (whereClauses.length) {
     sql = `
       SELECT r.*, 0 as rank
       FROM rfcs r
       WHERE ${whereClauses.join(" AND ")}
       ${orderClause}
-      LIMIT ?
     `;
     countSql = `
       SELECT COUNT(*) as total
       FROM rfcs r
       WHERE ${whereClauses.join(" AND ")}
     `;
-    params.push(limit);
   } else {
     sql = `
       SELECT r.*, 0 as rank
       FROM rfcs r
       ${orderClause}
-      LIMIT ?
     `;
     countSql = `SELECT COUNT(*) as total FROM rfcs`;
-    params.push(limit);
   }
 
   const rows = db.prepare(sql).all(...params) as Record<string, unknown>[];

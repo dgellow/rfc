@@ -1,7 +1,8 @@
 import type { KeyEvent } from "@dgellow/weew";
-import { isKey, Keys } from "@dgellow/weew";
+import { isKey, Keys, TextInput } from "@dgellow/weew";
 import type { AppContext } from "@dgellow/weew";
-import type { SortOrder, TuiState } from "./state.ts";
+import type { Keymap, SortOrder, TuiState } from "./state.ts";
+import { saveConfig } from "./config.ts";
 import { getRfc, getRfcBody, search as dbSearch } from "../data/db.ts";
 import { fetchRfc } from "../data/fetch.ts";
 import {
@@ -36,6 +37,14 @@ export function handleKey(
   // Global keys
   if (isKey(event, "?") && !state.searchActive && !state.contentSearchActive) {
     return { ...state, showHelp: !state.showHelp };
+  }
+  if (
+    isKey(event, "K") && event.shift && !state.searchActive &&
+    !state.contentSearchActive
+  ) {
+    const newKeymap: Keymap = state.keymap === "vim" ? "emacs" : "vim";
+    saveConfig({ keymap: newKeymap });
+    return { ...state, keymap: newKeymap, showHelp: false };
   }
   if (state.showHelp) {
     return { ...state, showHelp: false };
@@ -236,65 +245,28 @@ function handleSearchInput(
     });
   }
 
-  // Text editing
-  if (isKey(event, Keys.Backspace)) {
-    if (state.cursorPos === 0) {
-      if (state.query.length === 0) {
-        return { ...state, searchActive: false };
-      }
-      return;
+  // Backspace on empty query exits search
+  if (
+    isKey(event, Keys.Backspace) && state.cursorPos === 0 &&
+    state.query.length === 0
+  ) {
+    return { ...state, searchActive: false };
+  }
+
+  // Delegate text editing to TextInput
+  const input = TextInput({ value: state.query, cursorPos: state.cursorPos });
+  const update = input.handleKey(event);
+  if (update) {
+    if (update.value !== state.query) {
+      return runSearch({
+        ...state,
+        query: update.value,
+        cursorPos: update.cursorPos,
+        selectedIndex: 0,
+        listOffset: 0,
+      });
     }
-    const newQuery = state.query.slice(0, state.cursorPos - 1) +
-      state.query.slice(state.cursorPos);
-    return runSearch({
-      ...state,
-      query: newQuery,
-      cursorPos: state.cursorPos - 1,
-      selectedIndex: 0,
-      listOffset: 0,
-    });
-  }
-
-  if (isKey(event, "u", { ctrl: true })) {
-    return runSearch({
-      ...state,
-      query: "",
-      cursorPos: 0,
-      selectedIndex: 0,
-      listOffset: 0,
-    });
-  }
-
-  if (isKey(event, "a", { ctrl: true }) || isKey(event, Keys.Home)) {
-    return { ...state, cursorPos: 0 };
-  }
-
-  if (isKey(event, "e", { ctrl: true }) || isKey(event, Keys.End)) {
-    return { ...state, cursorPos: state.query.length };
-  }
-
-  if (isKey(event, Keys.Left)) {
-    return { ...state, cursorPos: Math.max(0, state.cursorPos - 1) };
-  }
-
-  if (isKey(event, Keys.Right)) {
-    return {
-      ...state,
-      cursorPos: Math.min(state.query.length, state.cursorPos + 1),
-    };
-  }
-
-  // Regular character input
-  if (event.key.length === 1 && !event.ctrl && !event.alt && !event.meta) {
-    const newQuery = state.query.slice(0, state.cursorPos) + event.key +
-      state.query.slice(state.cursorPos);
-    return runSearch({
-      ...state,
-      query: newQuery,
-      cursorPos: state.cursorPos + 1,
-      selectedIndex: 0,
-      listOffset: 0,
-    });
+    return { ...state, cursorPos: update.cursorPos };
   }
 
   return;
@@ -312,7 +284,6 @@ function runSearch(state: TuiState): TuiState {
     }
 
     const { results, total } = dbSearch(db, query || "", {
-      limit: 500,
       orderBy: state.sortOrder,
     });
     return { ...state, results, totalMatches: total, error: null };
@@ -501,13 +472,14 @@ function handleContentSearchKey(
     };
   }
 
-  if (isKey(event, Keys.Backspace)) {
-    if (state.contentSearch.length === 0) return;
-    return { ...state, contentSearch: state.contentSearch.slice(0, -1) };
-  }
-
-  if (event.key.length === 1 && !event.ctrl && !event.alt) {
-    return { ...state, contentSearch: state.contentSearch + event.key };
+  // Delegate text editing to TextInput (cursor always at end)
+  const input = TextInput({
+    value: state.contentSearch,
+    cursorPos: state.contentSearch.length,
+  });
+  const update = input.handleKey(event);
+  if (update) {
+    return { ...state, contentSearch: update.value };
   }
 
   return;

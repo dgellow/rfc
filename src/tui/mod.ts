@@ -28,7 +28,7 @@ export async function runTui(): Promise<void> {
   const state = initialState();
 
   // Initial search to populate results
-  const { results, total } = search(db, "", { limit: 500 });
+  const { results, total } = search(db, "");
   state.results = results;
   state.totalMatches = total;
   state.indexTotal = getIndexRfcCount(db);
@@ -124,7 +124,7 @@ function renderHelp(state: TuiState): Component {
       "  author:name  status:standard",
       "  wg:httpbis   year:2022",
       "",
-      "  ? to toggle this help",
+      "  K switch to emacs  ? close",
     ]
     : [
       "Key Bindings (emacs)",
@@ -153,7 +153,7 @@ function renderHelp(state: TuiState): Component {
       "  author:name  status:standard",
       "  wg:httpbis   year:2022",
       "",
-      "  ? to toggle this help",
+      "  K switch to vim    ? close",
     ];
 
   const helpContent: Component = {

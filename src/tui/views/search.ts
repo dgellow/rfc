@@ -8,9 +8,11 @@ import {
   Row,
   Text,
   TextInput,
+  VirtualList,
 } from "@dgellow/weew";
 import type { RenderContext } from "@dgellow/weew";
 import type { SortOrder, TuiState } from "../state.ts";
+import type { SearchResult } from "../../types.ts";
 
 const STATUS_LABELS = [
   { key: null, label: "ALL" },
@@ -127,108 +129,27 @@ export function renderSearchScreen(
       : `${state.totalMatches.toLocaleString()}`
     : "";
 
-  const resultList: Component = {
-    render(canvas, rect) {
-      if (state.results.length === 0) {
+  const resultList: Component = state.results.length === 0
+    ? {
+      render(canvas, rect) {
         const msg = state.query ? "No results" : "/ to search";
         const msgY = Math.floor(rect.height / 3);
         const msgX = Math.floor((rect.width - msg.length) / 2);
         canvas.text(rect.x + Math.max(0, msgX), rect.y + msgY, msg, {
           fg: colors.fg.hex("#555555"),
         });
-        return;
-      }
-
-      const resultLines = buildResultLines(state, rect.width);
-      const visibleCount = Math.min(rect.height, resultLines.length);
-
-      for (let i = 0; i < visibleCount; i++) {
-        const dataIdx = state.listOffset + i;
-        if (dataIdx >= resultLines.length) break;
-
-        const line = resultLines[dataIdx];
-        const isSelected = dataIdx === state.selectedIndex;
-        const y = rect.y + i;
-
-        if (isSelected) {
-          canvas.fill(rect.x, y, rect.width, 1, " ", {
-            bg: colors.bg.hex("#1a3a5c"),
-          });
-        }
-
-        // Selection indicator
-        if (isSelected) {
-          canvas.text(rect.x, y, "\u203a ", {
-            fg: colors.fg.cyan,
-            bg: colors.bg.hex("#1a3a5c"),
-          });
-        }
-
-        // RFC number
-        const numX = rect.x + 2;
-        canvas.text(numX, y, "RFC ", {
-          fg: isSelected ? colors.fg.hex("#5599bb") : colors.fg.hex("#666666"),
-          bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
-        });
-        canvas.text(numX + 4, y, line.numberStr, {
-          fg: isSelected ? colors.fg.cyan : colors.fg.yellow,
-          bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
-          style: isSelected ? "\x1b[1m" : undefined,
-        });
-
-        // Title
-        const titleX = numX + 10;
-        canvas.text(titleX, y, line.title, {
-          fg: isSelected
-            ? colors.fg.white
-            : line.obsoleted
-            ? colors.fg.gray
-            : undefined,
-          bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
-          style: line.obsoleted ? "\x1b[9m" : undefined,
-        });
-
-        if (line.obsoleted && !isSelected) {
-          const marker = " (obsoleted)";
-          const markerX = titleX + line.title.length;
-          if (markerX + marker.length < rect.x + rect.width - 22) {
-            canvas.text(markerX, y, marker, {
-              fg: colors.fg.hex("#664444"),
-            });
-          }
-        }
-
-        // Status
-        const statusX = rect.x + rect.width - 18;
-        canvas.text(statusX, y, line.status.padStart(10), {
-          fg: statusColor(line.rawStatus),
-          bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
-          style: "\x1b[2m",
-        });
-
-        // Year
-        canvas.text(rect.x + rect.width - 6, y, line.year, {
-          fg: isSelected ? colors.fg.hex("#888888") : colors.fg.hex("#555555"),
-          bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
-        });
-      }
-
-      // Scroll indicators
-      if (state.listOffset > 0) {
-        canvas.text(rect.x + rect.width - 1, rect.y, "\u25b2", {
-          fg: colors.fg.hex("#555555"),
-        });
-      }
-      if (state.listOffset + visibleCount < resultLines.length) {
-        canvas.text(
-          rect.x + rect.width - 1,
-          rect.y + rect.height - 1,
-          "\u25bc",
-          { fg: colors.fg.hex("#555555") },
-        );
-      }
-    },
-  };
+      },
+    }
+    : VirtualList<SearchResult>({
+      items: state.results,
+      selected: state.selectedIndex,
+      scrollY: state.listOffset,
+      itemHeight: 1,
+      border: "none",
+      showScrollbar: true,
+      renderItem: (result, _index, isSelected) =>
+        renderResultItem(result, isSelected),
+    });
 
   // Hints change based on mode
   let hints: string;
@@ -236,10 +157,10 @@ export function renderSearchScreen(
     hints = "Enter confirm  Esc cancel";
   } else if (state.keymap === "vim") {
     hints =
-      "j/k \u2195  Enter open  / search  s sort  Tab filter  i info  ? help  q quit";
+      "j/k \u2195  Enter open  / search  s sort  Tab filter  i info  ? help  K keymap  q quit";
   } else {
     hints =
-      "C-n/C-p \u2195  Enter open  C-s search  s sort  Tab filter  i info  ? help  C-c quit";
+      "C-n/C-p \u2195  Enter open  C-s search  s sort  Tab filter  i info  ? help  K keymap  C-c quit";
   }
 
   // Title with count
@@ -303,34 +224,81 @@ export function adjustListOffset(
   return state;
 }
 
-interface ResultLine {
-  numberStr: string;
-  title: string;
-  status: string;
-  rawStatus: string;
-  year: string;
-  obsoleted: boolean;
-}
+function renderResultItem(
+  result: SearchResult,
+  isSelected: boolean,
+): Component {
+  return {
+    render(canvas, rect) {
+      const meta = result.meta;
+      const obsoleted = meta.obsoletedBy.length > 0;
+      const titleMaxWidth = rect.width - 2 - 10 - 18 - 6 - 4;
+      let title = meta.title;
+      if (title.length > titleMaxWidth) {
+        title = title.slice(0, titleMaxWidth - 1) + "\u2026";
+      }
+      const numberStr = String(meta.number);
+      const status = shortStatus(meta.status);
+      const year = meta.date.year ? String(meta.date.year) : "    ";
 
-function buildResultLines(state: TuiState, width: number): ResultLine[] {
-  const titleMaxWidth = width - 2 - 10 - 18 - 6 - 4;
+      if (isSelected) {
+        canvas.fill(rect.x, rect.y, rect.width, 1, " ", {
+          bg: colors.bg.hex("#1a3a5c"),
+        });
+      }
 
-  return state.results.map((r) => {
-    const meta = r.meta;
-    let title = meta.title;
-    if (title.length > titleMaxWidth) {
-      title = title.slice(0, titleMaxWidth - 1) + "\u2026";
-    }
+      if (isSelected) {
+        canvas.text(rect.x, rect.y, "\u203a ", {
+          fg: colors.fg.cyan,
+          bg: colors.bg.hex("#1a3a5c"),
+        });
+      }
 
-    return {
-      numberStr: String(meta.number),
-      title,
-      status: shortStatus(meta.status),
-      rawStatus: meta.status,
-      year: meta.date.year ? String(meta.date.year) : "    ",
-      obsoleted: meta.obsoletedBy.length > 0,
-    };
-  });
+      const numX = rect.x + 2;
+      canvas.text(numX, rect.y, "RFC ", {
+        fg: isSelected ? colors.fg.hex("#5599bb") : colors.fg.hex("#666666"),
+        bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
+      });
+      canvas.text(numX + 4, rect.y, numberStr, {
+        fg: isSelected ? colors.fg.cyan : colors.fg.yellow,
+        bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
+        style: isSelected ? "\x1b[1m" : undefined,
+      });
+
+      const titleX = numX + 10;
+      canvas.text(titleX, rect.y, title, {
+        fg: isSelected
+          ? colors.fg.white
+          : obsoleted
+          ? colors.fg.gray
+          : undefined,
+        bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
+        style: obsoleted ? "\x1b[9m" : undefined,
+      });
+
+      if (obsoleted && !isSelected) {
+        const marker = " (obsoleted)";
+        const markerX = titleX + title.length;
+        if (markerX + marker.length < rect.x + rect.width - 22) {
+          canvas.text(markerX, rect.y, marker, {
+            fg: colors.fg.hex("#664444"),
+          });
+        }
+      }
+
+      const statusX = rect.x + rect.width - 18;
+      canvas.text(statusX, rect.y, status.padStart(10), {
+        fg: statusColor(meta.status),
+        bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
+        style: "\x1b[2m",
+      });
+
+      canvas.text(rect.x + rect.width - 6, rect.y, year, {
+        fg: isSelected ? colors.fg.hex("#888888") : colors.fg.hex("#555555"),
+        bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
+      });
+    },
+  };
 }
 
 function shortStatus(status: string): string {
