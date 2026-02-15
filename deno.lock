@@ -3,7 +3,7 @@
   "specifiers": {
     "jsr:@db/sqlite@0.12": "0.12.0",
     "jsr:@denosaurs/plug@1": "1.1.0",
-    "jsr:@dgellow/weew@0.2": "0.2.0",
+    "jsr:@dgellow/weew@0.3": "0.3.0",
     "jsr:@libs/xml@^6.0.2": "6.0.8",
     "jsr:@std/assert@0.217": "0.217.0",
     "jsr:@std/assert@1": "1.0.18",
@@ -32,8 +32,8 @@
         "jsr:@std/path@1"
       ]
     },
-    "@dgellow/weew@0.2.0": {
-      "integrity": "9a9b9bdf5eb0b46ed6234622d7e5c9b23975dafcaf085eda1a2c123706d2e412",
+    "@dgellow/weew@0.3.0": {
+      "integrity": "2be454129d37600c828dd23b85712a1801ba2fa8f28e3bbaefd341dfc8e04ac1",
       "dependencies": [
         "jsr:@std/assert@1"
       ]
@@ -187,7 +187,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@db/sqlite@0.12",
-      "jsr:@dgellow/weew@0.2",
+      "jsr:@dgellow/weew@0.3",
       "jsr:@libs/xml@^6.0.2",
       "jsr:@std/assert@1",
       "jsr:@std/fs@1",

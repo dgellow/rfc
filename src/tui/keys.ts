@@ -1,6 +1,5 @@
-import type { KeyEvent } from "@dgellow/weew";
+import type { AppContext, KeyEvent } from "@dgellow/weew";
 import { isKey, Keys, TextInput } from "@dgellow/weew";
-import type { AppContext } from "@dgellow/weew";
 import type { Keymap, SortOrder, TuiState } from "./state.ts";
 import { saveConfig } from "./config.ts";
 import { getRfc, getRfcBody, search as dbSearch } from "../data/db.ts";
@@ -32,7 +31,7 @@ const SORT_CYCLE: SortOrder[] = [
 export function handleKey(
   event: KeyEvent,
   state: TuiState,
-  ctx: AppContext<TuiState>,
+  ctx: AppContext,
 ): TuiState | undefined {
   // Global keys
   if (isKey(event, "?") && !state.searchActive && !state.contentSearchActive) {
@@ -52,7 +51,7 @@ export function handleKey(
 
   if (state.screen === "search") {
     if (state.searchActive) {
-      return handleSearchInput(event, state, ctx);
+      return handleSearchInput(event, state);
     }
     return handleBrowseKey(event, state, ctx);
   } else {
@@ -65,7 +64,7 @@ export function handleKey(
 function handleBrowseKey(
   event: KeyEvent,
   state: TuiState,
-  ctx: AppContext<TuiState>,
+  ctx: AppContext,
 ): TuiState | undefined {
   const listHeight = ctx.size().rows - 2 - 1 - 1 - 1 - 1;
 
@@ -137,7 +136,7 @@ function handleBrowseKey(
     if (state.results.length === 0) return;
     const result = state.results[state.selectedIndex];
     if (!result) return;
-    openRfc(result.meta.number, result.meta.title, state, ctx);
+    openRfc(result.meta.number, result.meta.title);
     return {
       ...state,
       screen: "reader",
@@ -228,7 +227,6 @@ function handleBrowseKey(
 function handleSearchInput(
   event: KeyEvent,
   state: TuiState,
-  _ctx: AppContext<TuiState>,
 ): TuiState | undefined {
   // Exit search mode
   if (isKey(event, Keys.Escape) || isKey(event, "g", { ctrl: true })) {
@@ -297,7 +295,7 @@ function runSearch(state: TuiState): TuiState {
 function handleReaderKey(
   event: KeyEvent,
   state: TuiState,
-  ctx: AppContext<TuiState>,
+  ctx: AppContext,
 ): TuiState | undefined {
   if (state.loading) return;
 
@@ -385,7 +383,7 @@ function handleReaderKey(
   }
 
   // Top/bottom
-  if (isKey(event, "g") && !event.shift) {
+  if (isKey(event, "g")) {
     return updateVisibleRefs({ ...state, scrollY: 0, refIndex: -1 });
   }
   if (isKey(event, "G")) {
@@ -441,7 +439,7 @@ function handleReaderKey(
   if (
     isKey(event, Keys.Enter) || isKey(event, "l") || isKey(event, Keys.Right)
   ) {
-    return followReference(state, ctx);
+    return followReference(state);
   }
 
   return;
@@ -519,7 +517,6 @@ function updateVisibleRefs(state: TuiState): TuiState {
 
 function followReference(
   state: TuiState,
-  ctx: AppContext<TuiState>,
 ): TuiState | undefined {
   let targetRef: number | undefined;
 
@@ -534,7 +531,7 @@ function followReference(
   const history = [...state.history];
   if (state.currentRfc) history.push(state.currentRfc);
 
-  openRfc(targetRef, "", state, ctx);
+  openRfc(targetRef, "");
   return {
     ...state,
     screen: "reader",
@@ -554,8 +551,6 @@ function followReference(
 async function openRfc(
   number: number,
   title: string,
-  _state: TuiState,
-  ctx: AppContext<TuiState>,
 ): Promise<void> {
   try {
     const text = await fetchRfc(number);
@@ -570,7 +565,7 @@ async function openRfc(
       }
     }
 
-    ctx.setState((s) => {
+    asyncUpdate((s) => {
       const newState: TuiState = {
         ...s,
         lines,
@@ -581,12 +576,25 @@ async function openRfc(
       return { ...newState, visibleRefs: collectVisibleRefs(newState) };
     });
   } catch (e) {
-    ctx.setState((s) => ({
+    asyncUpdate((s) => ({
       ...s,
       loading: false,
       error: (e as Error).message,
     }));
   }
+}
+
+// Async state updater (set by mod.ts, used for post-fetch updates)
+let _asyncUpdate: ((fn: (s: TuiState) => TuiState) => void) | null = null;
+
+export function setAsyncUpdater(
+  fn: (updater: (s: TuiState) => TuiState) => void,
+): void {
+  _asyncUpdate = fn;
+}
+
+function asyncUpdate(fn: (s: TuiState) => TuiState): void {
+  _asyncUpdate?.(fn);
 }
 
 // Synchronous db access

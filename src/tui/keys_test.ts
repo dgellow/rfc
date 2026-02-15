@@ -1,9 +1,8 @@
 import { assertEquals } from "@std/assert";
 import { TestDriver } from "@dgellow/weew";
-import type { AppConfig } from "@dgellow/weew";
 import { Database } from "@db/sqlite";
 import { initialState, type TuiState } from "./state.ts";
-import { handleKey, setDbSync } from "./keys.ts";
+import { handleKey, setAsyncUpdater, setDbSync } from "./keys.ts";
 import { renderSearchScreen } from "./views/search.ts";
 import { renderReaderScreen } from "./views/reader.ts";
 import type { SearchResult } from "../types.ts";
@@ -133,33 +132,41 @@ function createTestDb(): Database {
   return db;
 }
 
-function makeAppConfig(state: TuiState): AppConfig<TuiState> {
-  return {
-    initialState: state,
-    render: (state, ctx) => {
-      if (state.screen === "search") {
-        return renderSearchScreen(state, ctx);
-      }
-      return renderReaderScreen(state, ctx);
-    },
-    onKey: (event, state, ctx) => handleKey(event, state, ctx),
-  };
-}
+const defaultResults = [
+  makeResult(9999, "Test Protocol"),
+  makeResult(9998, "Another Protocol", "INFORMATIONAL"),
+  makeResult(9997, "Third Protocol", "INTERNET STANDARD"),
+];
 
-function makeDriver(overrides?: Partial<TuiState>): TestDriver<TuiState> {
-  const results = [
-    makeResult(9999, "Test Protocol"),
-    makeResult(9998, "Another Protocol", "INFORMATIONAL"),
-    makeResult(9997, "Third Protocol", "INTERNET STANDARD"),
-  ];
-  const state: TuiState = {
+let state: TuiState;
+
+function makeDriver(overrides?: Partial<TuiState>): TestDriver {
+  state = {
     ...initialState(),
-    results,
-    totalMatches: results.length,
-    indexTotal: results.length,
+    results: defaultResults,
+    totalMatches: defaultResults.length,
+    indexTotal: defaultResults.length,
     ...overrides,
   };
-  return new TestDriver(makeAppConfig(state), 100, 30);
+
+  setAsyncUpdater((fn) => {
+    state = fn(state);
+  });
+
+  return new TestDriver(
+    {
+      render: (ctx) => {
+        if (state.screen === "search") return renderSearchScreen(state, ctx);
+        return renderReaderScreen(state, ctx);
+      },
+      onKey: (event, ctx) => {
+        const newState = handleKey(event, state, ctx);
+        if (newState) state = newState;
+      },
+    },
+    100,
+    30,
+  );
 }
 
 // --- Tests ---
@@ -181,11 +188,11 @@ Deno.test("browse: j moves selection down", () => {
   setup();
   try {
     const driver = makeDriver();
-    assertEquals(driver.state.selectedIndex, 0);
+    assertEquals(state.selectedIndex, 0);
     driver.sendKey("j");
-    assertEquals(driver.state.selectedIndex, 1);
+    assertEquals(state.selectedIndex, 1);
     driver.sendKey("j");
-    assertEquals(driver.state.selectedIndex, 2);
+    assertEquals(state.selectedIndex, 2);
   } finally {
     teardown();
   }
@@ -195,11 +202,11 @@ Deno.test("browse: k moves selection up", () => {
   setup();
   try {
     const driver = makeDriver({ selectedIndex: 2 });
-    assertEquals(driver.state.selectedIndex, 2);
+    assertEquals(state.selectedIndex, 2);
     driver.sendKey("k");
-    assertEquals(driver.state.selectedIndex, 1);
+    assertEquals(state.selectedIndex, 1);
     driver.sendKey("k");
-    assertEquals(driver.state.selectedIndex, 0);
+    assertEquals(state.selectedIndex, 0);
   } finally {
     teardown();
   }
@@ -210,7 +217,7 @@ Deno.test("browse: j does not go past end", () => {
   try {
     const driver = makeDriver({ selectedIndex: 2 });
     driver.sendKey("j");
-    assertEquals(driver.state.selectedIndex, 2);
+    assertEquals(state.selectedIndex, 2);
   } finally {
     teardown();
   }
@@ -221,7 +228,7 @@ Deno.test("browse: k does not go past beginning", () => {
   try {
     const driver = makeDriver({ selectedIndex: 0 });
     driver.sendKey("k");
-    assertEquals(driver.state.selectedIndex, 0);
+    assertEquals(state.selectedIndex, 0);
   } finally {
     teardown();
   }
@@ -231,9 +238,9 @@ Deno.test("browse: / activates search", () => {
   setup();
   try {
     const driver = makeDriver();
-    assertEquals(driver.state.searchActive, false);
+    assertEquals(state.searchActive, false);
     driver.sendKey("/");
-    assertEquals(driver.state.searchActive, true);
+    assertEquals(state.searchActive, true);
   } finally {
     teardown();
   }
@@ -243,15 +250,15 @@ Deno.test("browse: s cycles sort order", () => {
   setup();
   try {
     const driver = makeDriver();
-    assertEquals(driver.state.sortOrder, "number_desc");
+    assertEquals(state.sortOrder, "number_desc");
     driver.sendKey("s");
-    assertEquals(driver.state.sortOrder, "number_asc");
+    assertEquals(state.sortOrder, "number_asc");
     driver.sendKey("s");
-    assertEquals(driver.state.sortOrder, "date");
+    assertEquals(state.sortOrder, "date");
     driver.sendKey("s");
-    assertEquals(driver.state.sortOrder, "relevance");
+    assertEquals(state.sortOrder, "relevance");
     driver.sendKey("s");
-    assertEquals(driver.state.sortOrder, "number_desc");
+    assertEquals(state.sortOrder, "number_desc");
   } finally {
     teardown();
   }
@@ -261,11 +268,11 @@ Deno.test("browse: Tab cycles status filter", () => {
   setup();
   try {
     const driver = makeDriver();
-    assertEquals(driver.state.statusFilter, null);
+    assertEquals(state.statusFilter, null);
     driver.sendKey("Tab");
-    assertEquals(driver.state.statusFilter, "INTERNET STANDARD");
+    assertEquals(state.statusFilter, "INTERNET STANDARD");
     driver.sendKey("Tab");
-    assertEquals(driver.state.statusFilter, "PROPOSED STANDARD");
+    assertEquals(state.statusFilter, "PROPOSED STANDARD");
   } finally {
     teardown();
   }
@@ -292,11 +299,11 @@ Deno.test({
     setup();
     try {
       const driver = makeDriver();
-      assertEquals(driver.state.screen, "search");
+      assertEquals(state.screen, "search");
       driver.sendKey("Enter");
-      assertEquals(driver.state.screen, "reader");
-      assertEquals(driver.state.currentRfc, 9999);
-      assertEquals(driver.state.loading, true);
+      assertEquals(state.screen, "reader");
+      assertEquals(state.currentRfc, 9999);
+      assertEquals(state.loading, true);
     } finally {
       teardown();
     }
@@ -313,7 +320,7 @@ Deno.test({
     try {
       const driver = makeDriver({ selectedIndex: 2 });
       driver.sendKey("g");
-      assertEquals(driver.state.selectedIndex, 0);
+      assertEquals(state.selectedIndex, 0);
     } finally {
       teardown();
     }
@@ -324,11 +331,11 @@ Deno.test("browse: i toggles info panel", () => {
   setup();
   try {
     const driver = makeDriver();
-    assertEquals(driver.state.showInfo, false);
+    assertEquals(state.showInfo, false);
     driver.sendKey("i");
-    assertEquals(driver.state.showInfo, true);
+    assertEquals(state.showInfo, true);
     driver.sendKey("i");
-    assertEquals(driver.state.showInfo, false);
+    assertEquals(state.showInfo, false);
   } finally {
     teardown();
   }
@@ -341,13 +348,13 @@ Deno.test("search: typing updates query", () => {
   try {
     const driver = makeDriver({ searchActive: true });
     driver.sendKey("h");
-    assertEquals(driver.state.query, "h");
+    assertEquals(state.query, "h");
     driver.sendKey("t");
-    assertEquals(driver.state.query, "ht");
+    assertEquals(state.query, "ht");
     driver.sendKey("t");
-    assertEquals(driver.state.query, "htt");
+    assertEquals(state.query, "htt");
     driver.sendKey("p");
-    assertEquals(driver.state.query, "http");
+    assertEquals(state.query, "http");
   } finally {
     teardown();
   }
@@ -357,10 +364,10 @@ Deno.test("search: Escape exits search mode", () => {
   setup();
   try {
     const driver = makeDriver({ searchActive: true, query: "test" });
-    assertEquals(driver.state.searchActive, true);
+    assertEquals(state.searchActive, true);
     driver.sendKey("Escape");
-    assertEquals(driver.state.searchActive, false);
-    assertEquals(driver.state.query, "test");
+    assertEquals(state.searchActive, false);
+    assertEquals(state.query, "test");
   } finally {
     teardown();
   }
@@ -371,7 +378,7 @@ Deno.test("search: Enter confirms and exits", () => {
   try {
     const driver = makeDriver({ searchActive: true, query: "test" });
     driver.sendKey("Enter");
-    assertEquals(driver.state.searchActive, false);
+    assertEquals(state.searchActive, false);
   } finally {
     teardown();
   }
@@ -382,7 +389,7 @@ Deno.test("search: Backspace on empty exits search", () => {
   try {
     const driver = makeDriver({ searchActive: true, query: "", cursorPos: 0 });
     driver.sendKey("Backspace");
-    assertEquals(driver.state.searchActive, false);
+    assertEquals(state.searchActive, false);
   } finally {
     teardown();
   }
@@ -397,8 +404,8 @@ Deno.test("search: Backspace deletes character", () => {
       cursorPos: 4,
     });
     driver.sendKey("Backspace");
-    assertEquals(driver.state.query, "tes");
-    assertEquals(driver.state.cursorPos, 3);
+    assertEquals(state.query, "tes");
+    assertEquals(state.cursorPos, 3);
   } finally {
     teardown();
   }
@@ -413,7 +420,7 @@ Deno.test("search: Ctrl+A moves cursor to start", () => {
       cursorPos: 4,
     });
     driver.sendKey("a", { ctrl: true });
-    assertEquals(driver.state.cursorPos, 0);
+    assertEquals(state.cursorPos, 0);
   } finally {
     teardown();
   }
@@ -428,7 +435,7 @@ Deno.test("search: Ctrl+E moves cursor to end", () => {
       cursorPos: 0,
     });
     driver.sendKey("e", { ctrl: true });
-    assertEquals(driver.state.cursorPos, 4);
+    assertEquals(state.cursorPos, 4);
   } finally {
     teardown();
   }
@@ -443,8 +450,8 @@ Deno.test("search: Ctrl+U clears to start of line", () => {
       cursorPos: 5,
     });
     driver.sendKey("u", { ctrl: true });
-    assertEquals(driver.state.query, " world");
-    assertEquals(driver.state.cursorPos, 0);
+    assertEquals(state.query, " world");
+    assertEquals(state.cursorPos, 0);
   } finally {
     teardown();
   }
@@ -464,11 +471,11 @@ Deno.test("reader: j/k scrolls", () => {
       currentTitle: "Test",
     });
     driver.sendKey("j");
-    assertEquals(driver.state.scrollY, 1);
+    assertEquals(state.scrollY, 1);
     driver.sendKey("j");
-    assertEquals(driver.state.scrollY, 2);
+    assertEquals(state.scrollY, 2);
     driver.sendKey("k");
-    assertEquals(driver.state.scrollY, 1);
+    assertEquals(state.scrollY, 1);
   } finally {
     teardown();
   }
@@ -484,8 +491,8 @@ Deno.test("reader: / activates content search", () => {
       currentTitle: "Test",
     });
     driver.sendKey("/");
-    assertEquals(driver.state.contentSearchActive, true);
-    assertEquals(driver.state.contentSearch, "");
+    assertEquals(state.contentSearchActive, true);
+    assertEquals(state.contentSearch, "");
   } finally {
     teardown();
   }
@@ -509,11 +516,11 @@ Deno.test("reader: content search typing and confirm", () => {
     driver.sendKey("f");
     driver.sendKey("o");
     driver.sendKey("x");
-    assertEquals(driver.state.contentSearch, "fox");
+    assertEquals(state.contentSearch, "fox");
     driver.sendKey("Enter");
-    assertEquals(driver.state.contentSearchActive, false);
-    assertEquals(driver.state.contentMatches.length, 1);
-    assertEquals(driver.state.contentMatches[0], 50);
+    assertEquals(state.contentSearchActive, false);
+    assertEquals(state.contentMatches.length, 1);
+    assertEquals(state.contentMatches[0], 50);
   } finally {
     teardown();
   }
@@ -529,7 +536,7 @@ Deno.test("reader: Escape goes back to search screen", () => {
       currentTitle: "Test",
     });
     driver.sendKey("Escape");
-    assertEquals(driver.state.screen, "search");
+    assertEquals(state.screen, "search");
   } finally {
     teardown();
   }
@@ -547,9 +554,9 @@ Deno.test("reader: Tab cycles RFC references", () => {
       refIndex: -1,
     });
     driver.sendKey("Tab");
-    assertEquals(driver.state.refIndex, 0);
+    assertEquals(state.refIndex, 0);
     driver.sendKey("Tab");
-    assertEquals(driver.state.refIndex, 1);
+    assertEquals(state.refIndex, 1);
   } finally {
     teardown();
   }
@@ -559,12 +566,12 @@ Deno.test("browse: ? toggles help", () => {
   setup();
   try {
     const driver = makeDriver();
-    assertEquals(driver.state.showHelp, false);
+    assertEquals(state.showHelp, false);
     driver.sendKey("?");
-    assertEquals(driver.state.showHelp, true);
+    assertEquals(state.showHelp, true);
     // Any key dismisses help
     driver.sendKey("j");
-    assertEquals(driver.state.showHelp, false);
+    assertEquals(state.showHelp, false);
   } finally {
     teardown();
   }

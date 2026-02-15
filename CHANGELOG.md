@@ -5,19 +5,20 @@
 ### Bug Fixes
 
 - add continue-on-error to npm publish steps <details><summary>Details</summary>
-  npm can return errors even on successful publishes, which blocks
-  remaining packages from being published.
-</details>
+  npm can return errors even on successful publishes, which blocks remaining
+  packages from being published.
 
+</details>
 
 ### CI
 
-- add test and build jobs, improve build script <details><summary>Details</summary>
+- add test and build jobs, improve build script
+  <details><summary>Details</summary>
   - CI now runs ./scripts/lint, ./scripts/test, and ./scripts/build
   - scripts/build does deno compile + npm build for current platform
   - Ignore build/ output directory
-</details>
 
+</details>
 
 ## 0.0.2
 

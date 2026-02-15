@@ -1,10 +1,8 @@
 import {
-  type AppContext,
   Box,
   Center,
   colors,
   type Component,
-  type KeyEvent,
   Positioned,
   type RenderContext,
   run,
@@ -14,7 +12,7 @@ import type { Database } from "@db/sqlite";
 import { ensureIndex } from "../data/index.ts";
 import { getIndexRfcCount, search } from "../data/db.ts";
 import { initialState, type TuiState } from "./state.ts";
-import { handleKey, setDbSync } from "./keys.ts";
+import { handleKey, setAsyncUpdater, setDbSync } from "./keys.ts";
 import { renderSearchScreen } from "./views/search.ts";
 import { renderReaderScreen } from "./views/reader.ts";
 import { renderInfoPanel } from "./views/info.ts";
@@ -25,7 +23,7 @@ export async function runTui(): Promise<void> {
   db = await ensureIndex();
   setDbSync(db);
 
-  const state = initialState();
+  let state = initialState();
 
   // Initial search to populate results
   const { results, total } = search(db, "");
@@ -33,16 +31,19 @@ export async function runTui(): Promise<void> {
   state.totalMatches = total;
   state.indexTotal = getIndexRfcCount(db);
 
-  await run<TuiState>({
-    initialState: state,
-    render: renderApp,
-    onKey: onKey,
-    onResize: (_size, state) => state,
-    tickInterval: 100,
-    onTick: (state) => {
-      // Keep spinner animating during loading
-      if (state.loading) return { ...state };
-      return undefined;
+  // Capture render trigger for async state updates (e.g. openRfc fetch)
+  let triggerRender: (() => void) | null = null;
+  setAsyncUpdater((fn) => {
+    state = fn(state);
+    triggerRender?.();
+  });
+
+  await run({
+    render: (ctx) => renderApp(state, ctx),
+    onKey: (event, ctx) => {
+      triggerRender = ctx.render;
+      const newState = handleKey(event, state, ctx);
+      if (newState) state = newState;
     },
   });
 }
@@ -82,14 +83,6 @@ function renderApp(state: TuiState, ctx: RenderContext): Component {
   }
 
   return Stack(layers);
-}
-
-function onKey(
-  event: KeyEvent,
-  state: TuiState,
-  ctx: AppContext<TuiState>,
-): TuiState | undefined {
-  return handleKey(event, state, ctx);
 }
 
 function renderHelp(state: TuiState): Component {
