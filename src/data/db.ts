@@ -204,11 +204,23 @@ function parseQuery(query: string): ParsedQuery {
   return { freeText: freeTerms.join(" "), filters };
 }
 
+export interface SearchOptions {
+  limit?: number;
+  orderBy?: "relevance" | "number_desc" | "number_asc" | "date";
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  total: number;
+}
+
 export function search(
   db: Database,
   query: string,
-  limit = 50,
-): SearchResult[] {
+  options: SearchOptions = {},
+): SearchResponse {
+  const limit = options.limit ?? 500;
+  const orderBy = options.orderBy ?? "relevance";
   const { freeText, filters } = parseQuery(query);
 
   const whereClauses: string[] = [];
@@ -239,10 +251,30 @@ export function search(
     }
   }
 
+  // Determine ORDER BY clause
+  let orderClause: string;
+  if (freeText && orderBy === "relevance") {
+    orderClause = "ORDER BY rank";
+  } else {
+    switch (orderBy) {
+      case "number_asc":
+        orderClause = "ORDER BY r.number ASC";
+        break;
+      case "date":
+        orderClause = "ORDER BY r.date_year DESC, r.number DESC";
+        break;
+      case "number_desc":
+      default:
+        orderClause = "ORDER BY r.number DESC";
+        break;
+    }
+  }
+
   let sql: string;
+  let countSql: string;
+  const countParams = [...params];
 
   if (freeText) {
-    // Use FTS5 for free-text search with prefix matching
     const ftsQuery = freeText
       .split(/\s+/)
       .map((t) => `"${t.replace(/"/g, '""')}"*`)
@@ -254,38 +286,56 @@ export function search(
       JOIN rfcs r ON r.number = f.rowid
       WHERE rfc_fts MATCH ?
       ${whereClauses.length ? "AND " + whereClauses.join(" AND ") : ""}
-      ORDER BY rank
+      ${orderClause}
       LIMIT ?
     `;
+    countSql = `
+      SELECT COUNT(*) as total
+      FROM rfc_fts f
+      JOIN rfcs r ON r.number = f.rowid
+      WHERE rfc_fts MATCH ?
+      ${whereClauses.length ? "AND " + whereClauses.join(" AND ") : ""}
+    `;
     params.unshift(ftsQuery);
+    countParams.unshift(ftsQuery);
     params.push(limit);
   } else if (whereClauses.length) {
-    // Filters only, no free text
     sql = `
       SELECT r.*, 0 as rank
       FROM rfcs r
       WHERE ${whereClauses.join(" AND ")}
-      ORDER BY r.number DESC
+      ${orderClause}
       LIMIT ?
+    `;
+    countSql = `
+      SELECT COUNT(*) as total
+      FROM rfcs r
+      WHERE ${whereClauses.join(" AND ")}
     `;
     params.push(limit);
   } else {
-    // No query at all — return recent RFCs
     sql = `
       SELECT r.*, 0 as rank
       FROM rfcs r
-      ORDER BY r.number DESC
+      ${orderClause}
       LIMIT ?
     `;
+    countSql = `SELECT COUNT(*) as total FROM rfcs`;
     params.push(limit);
   }
 
   const rows = db.prepare(sql).all(...params) as Record<string, unknown>[];
+  const countRow = db.prepare(countSql).get(...countParams) as {
+    total: number;
+  };
 
-  return rows.map((row) => ({
-    meta: rowToMeta(db, row),
-    rank: (row.rank as number) ?? 0,
-  }));
+  return {
+    results: rows.map((row) => ({
+      meta: rowToMeta(db, row),
+      rank: (row.rank as number) ?? 0,
+    })),
+    total: countRow.total,
+  };
 }
 
 // --- Helpers ---

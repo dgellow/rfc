@@ -1,16 +1,89 @@
 name: Publish
+
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
+  workflow_dispatch:
 
 jobs:
-  publish:
+  publish-jsr:
+    name: Publish to JSR
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       id-token: write
+
     steps:
-      - uses: actions/checkout@v6
-      - name: Publish package
-        run: npx jsr publish
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          cache: true
+
+      - name: Publish to JSR
+        run: deno publish
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Build npm packages
+        run: deno run -A scripts/build_npm.ts
+
+      - name: Publish @dgellow/rfc-linux-x64
+        run: npm publish --access public --provenance
+        working-directory: ./npm/rfc-linux-x64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @dgellow/rfc-linux-arm64
+        run: npm publish --access public --provenance
+        working-directory: ./npm/rfc-linux-arm64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @dgellow/rfc-darwin-x64
+        run: npm publish --access public --provenance
+        working-directory: ./npm/rfc-darwin-x64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @dgellow/rfc-darwin-arm64
+        run: npm publish --access public --provenance
+        working-directory: ./npm/rfc-darwin-arm64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @dgellow/rfc-win32-x64
+        run: npm publish --access public --provenance
+        working-directory: ./npm/rfc-win32-x64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @dgellow/rfc
+        run: npm publish --access public --provenance
+        working-directory: ./npm/rfc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

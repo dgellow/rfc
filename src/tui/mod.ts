@@ -10,9 +10,9 @@ import {
   run,
   Stack,
 } from "@dgellow/weew";
-import { Database } from "@db/sqlite";
+import type { Database } from "@db/sqlite";
 import { ensureIndex } from "../data/index.ts";
-import { search } from "../data/db.ts";
+import { getIndexRfcCount, search } from "../data/db.ts";
 import { initialState, type TuiState } from "./state.ts";
 import { handleKey, setDbSync } from "./keys.ts";
 import { renderSearchScreen } from "./views/search.ts";
@@ -28,8 +28,10 @@ export async function runTui(): Promise<void> {
   const state = initialState();
 
   // Initial search to populate results
-  const initialResults = search(db, "", 100);
-  state.results = initialResults;
+  const { results, total } = search(db, "", { limit: 500 });
+  state.results = results;
+  state.totalMatches = total;
+  state.indexTotal = getIndexRfcCount(db);
 
   await run<TuiState>({
     initialState: state,
@@ -60,8 +62,8 @@ function renderApp(state: TuiState, ctx: RenderContext): Component {
   if (state.showInfo) {
     const info = renderInfoPanel(state, db);
     if (info) {
-      const panelWidth = Math.min(50, ctx.width - 10);
-      const panelHeight = Math.min(20, ctx.height - 4);
+      const panelWidth = Math.min(55, ctx.width - 6);
+      const panelHeight = Math.min(24, ctx.height - 4);
       layers.push(
         Positioned({
           right: 2,
@@ -93,73 +95,97 @@ function onKey(
 function renderHelp(state: TuiState): Component {
   const lines = state.keymap === "vim"
     ? [
-      "Vim Key Bindings",
+      "Key Bindings (vim)",
       "",
-      "Search Screen:",
-      "  Type         Search RFCs",
-      "  j / ↓        Next result",
-      "  k / ↑        Previous result",
-      "  Enter        Open RFC",
-      "  Tab          Cycle status filter",
-      "  i            Info panel",
-      "  q            Quit",
+      "Browse:",
+      "  j/k \u2191\u2193         Navigate results",
+      "  Ctrl-d/u       Page down/up",
+      "  g / G          Top / bottom",
+      "  Enter / l      Open RFC",
+      "  /              Search",
+      "  s              Cycle sort order",
+      "  Tab            Cycle status filter",
+      "  i              Info panel",
+      "  Esc            Clear search",
+      "  q              Quit",
       "",
       "Reader:",
-      "  j / k        Scroll up/down",
-      "  Ctrl-d/u     Half-page down/up",
-      "  g / G        Top / Bottom",
-      "  /            Search in content",
-      "  n / N        Next/prev match",
-      "  Enter        Follow RFC reference",
-      "  i            Toggle info",
-      "  Esc / q      Back",
+      "  j/k \u2191\u2193         Scroll",
+      "  Ctrl-d/u       Half-page scroll",
+      "  g / G          Top / bottom",
+      "  /              Search in document",
+      "  n / N          Next / prev match",
+      "  Tab            Cycle RFC references",
+      "  Enter / l      Follow reference",
+      "  i              Info panel",
+      "  Esc / q / h    Back",
       "",
-      "Press any key to close",
+      "Search syntax:",
+      "  author:name  status:standard",
+      "  wg:httpbis   year:2022",
+      "",
+      "  ? to toggle this help",
     ]
     : [
-      "Emacs Key Bindings",
+      "Key Bindings (emacs)",
       "",
-      "Search Screen:",
-      "  Type         Search RFCs",
-      "  C-n / ↓      Next result",
-      "  C-p / ↑      Previous result",
-      "  Enter        Open RFC",
-      "  Tab          Cycle status filter",
-      "  i            Info panel",
-      "  C-c          Quit",
+      "Browse:",
+      "  C-n/C-p \u2191\u2193    Navigate results",
+      "  Enter          Open RFC",
+      "  C-s            Search",
+      "  s              Cycle sort order",
+      "  Tab            Cycle status filter",
+      "  i              Info panel",
+      "  Esc            Clear search",
+      "  C-c            Quit",
       "",
       "Reader:",
-      "  C-n / C-p    Scroll up/down",
-      "  C-v / M-v    Page down/up",
-      "  M-< / M->    Top / Bottom",
-      "  C-s          Search in content",
-      "  Enter        Follow RFC reference",
-      "  i            Toggle info",
-      "  C-g          Back",
+      "  C-n/C-p        Scroll",
+      "  C-v / M-v      Page down / up",
+      "  M-< / M->      Top / bottom",
+      "  C-s            Search in document",
+      "  Tab            Cycle RFC references",
+      "  Enter          Follow reference",
+      "  i              Info panel",
+      "  C-g            Back",
       "",
-      "Press any key to close",
+      "Search syntax:",
+      "  author:name  status:standard",
+      "  wg:httpbis   year:2022",
+      "",
+      "  ? to toggle this help",
     ];
 
   const helpContent: Component = {
     render(canvas, rect) {
       for (let i = 0; i < lines.length && i < rect.height; i++) {
-        const isBold = i === 0 || lines[i].endsWith(":");
+        const isTitle = i === 0;
+        const isSection = lines[i].endsWith(":");
+        const isHint = i === lines.length - 1;
         canvas.text(rect.x, rect.y + i, lines[i], {
-          fg: isBold ? colors.fg.cyan : undefined,
-          style: isBold ? "\x1b[1m" : undefined,
+          fg: isTitle
+            ? colors.fg.cyan
+            : isSection
+            ? colors.fg.hex("#888888")
+            : isHint
+            ? colors.fg.hex("#555555")
+            : undefined,
+          style: isTitle ? "\x1b[1m" : isSection ? "\x1b[1m" : undefined,
         });
       }
     },
   };
 
-  const width = 42;
+  const width = 44;
   const height = lines.length + 2;
 
   return Center({
     child: Box({
       border: "rounded",
-      borderColor: colors.fg.cyan,
+      borderColor: colors.fg.hex("#555555"),
       title: "Help",
+      fill: " ",
+      style: { bg: colors.bg.hex("#111111") },
       padding: { top: 0, right: 1, bottom: 0, left: 1 },
       child: helpContent,
     }),

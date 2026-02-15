@@ -1,5 +1,5 @@
 import { parse } from "@libs/xml";
-import { Database } from "@db/sqlite";
+import type { Database } from "@db/sqlite";
 import { INDEX_MAX_AGE_MS, RFC_INDEX_URL } from "../config.ts";
 import {
   getDb,

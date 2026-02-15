@@ -1,10 +1,15 @@
 import type { KeyEvent } from "@dgellow/weew";
 import { isKey, Keys } from "@dgellow/weew";
 import type { AppContext } from "@dgellow/weew";
-import type { TuiState } from "./state.ts";
+import type { SortOrder, TuiState } from "./state.ts";
 import { getRfc, getRfcBody, search as dbSearch } from "../data/db.ts";
 import { fetchRfc } from "../data/fetch.ts";
-import { findMatchingLines, prepareRfcText } from "../render/text.ts";
+import {
+  findMatchingLines,
+  findReferences,
+  prepareRfcText,
+} from "../render/text.ts";
+import { adjustListOffset } from "./views/search.ts";
 
 const STATUS_FILTERS = [
   null,
@@ -16,65 +21,110 @@ const STATUS_FILTERS = [
   "HISTORIC",
 ];
 
+const SORT_CYCLE: SortOrder[] = [
+  "number_desc",
+  "number_asc",
+  "date",
+  "relevance",
+];
+
 export function handleKey(
   event: KeyEvent,
   state: TuiState,
   ctx: AppContext<TuiState>,
 ): TuiState | undefined {
   // Global keys
-  if (isKey(event, "?") && !state.contentSearchActive) {
+  if (isKey(event, "?") && !state.searchActive && !state.contentSearchActive) {
     return { ...state, showHelp: !state.showHelp };
   }
   if (state.showHelp) {
-    // Any key dismisses help
     return { ...state, showHelp: false };
   }
 
   if (state.screen === "search") {
-    return handleSearchKey(event, state, ctx);
+    if (state.searchActive) {
+      return handleSearchInput(event, state, ctx);
+    }
+    return handleBrowseKey(event, state, ctx);
   } else {
     return handleReaderKey(event, state, ctx);
   }
 }
 
-// --- Search screen ---
+// --- Browse mode (search screen, input not focused) ---
 
-function handleSearchKey(
+function handleBrowseKey(
   event: KeyEvent,
   state: TuiState,
   ctx: AppContext<TuiState>,
 ): TuiState | undefined {
+  const listHeight = ctx.size().rows - 2 - 1 - 1 - 1 - 1;
+
   // Quit
   if (
-    isKey(event, "c", { ctrl: true }) ||
-    (state.keymap === "vim" && isKey(event, "q") && !state.query) ||
-    (state.keymap === "emacs" && isKey(event, "c", { ctrl: true }))
+    isKey(event, "q") ||
+    isKey(event, "c", { ctrl: true })
   ) {
     ctx.exit();
     return;
   }
 
+  // Activate search
+  if (isKey(event, "/") || isKey(event, "s", { ctrl: true })) {
+    return { ...state, searchActive: true };
+  }
+
   // Navigation
   if (
     isKey(event, Keys.Down) ||
-    (state.keymap === "vim" && isKey(event, "j")) ||
+    isKey(event, "j") ||
     (state.keymap === "emacs" && isKey(event, "n", { ctrl: true }))
   ) {
     const next = Math.min(state.selectedIndex + 1, state.results.length - 1);
-    return { ...state, selectedIndex: next };
+    return adjustListOffset({ ...state, selectedIndex: next }, listHeight);
   }
 
   if (
     isKey(event, Keys.Up) ||
-    (state.keymap === "vim" && isKey(event, "k")) ||
+    isKey(event, "k") ||
     (state.keymap === "emacs" && isKey(event, "p", { ctrl: true }))
   ) {
     const prev = Math.max(state.selectedIndex - 1, 0);
-    return { ...state, selectedIndex: prev };
+    return adjustListOffset({ ...state, selectedIndex: prev }, listHeight);
+  }
+
+  // Page down/up
+  if (
+    isKey(event, Keys.PageDown) ||
+    isKey(event, "d", { ctrl: true })
+  ) {
+    const next = Math.min(
+      state.selectedIndex + listHeight,
+      state.results.length - 1,
+    );
+    return adjustListOffset({ ...state, selectedIndex: next }, listHeight);
+  }
+  if (
+    isKey(event, Keys.PageUp) ||
+    isKey(event, "u", { ctrl: true })
+  ) {
+    const prev = Math.max(state.selectedIndex - listHeight, 0);
+    return adjustListOffset({ ...state, selectedIndex: prev }, listHeight);
+  }
+
+  // Top/bottom
+  if (isKey(event, "g")) {
+    return adjustListOffset({ ...state, selectedIndex: 0 }, listHeight);
+  }
+  if (isKey(event, "G")) {
+    const last = Math.max(0, state.results.length - 1);
+    return adjustListOffset({ ...state, selectedIndex: last }, listHeight);
   }
 
   // Open RFC
-  if (isKey(event, Keys.Enter)) {
+  if (
+    isKey(event, Keys.Enter) || isKey(event, "l") || isKey(event, Keys.Right)
+  ) {
     if (state.results.length === 0) return;
     const result = state.results[state.selectedIndex];
     if (!result) return;
@@ -90,13 +140,28 @@ function handleSearchKey(
       contentSearchActive: false,
       contentMatches: [],
       contentMatchIndex: 0,
+      refIndex: -1,
+      visibleRefs: [],
     };
   }
 
   // Info toggle
-  if (isKey(event, "i") && !state.query) {
+  if (isKey(event, "i")) {
     if (state.results.length === 0) return;
     return { ...state, showInfo: !state.showInfo };
+  }
+
+  // Sort
+  if (isKey(event, "s")) {
+    const currentIdx = SORT_CYCLE.indexOf(state.sortOrder);
+    const nextIdx = (currentIdx + 1) % SORT_CYCLE.length;
+    const newSort = SORT_CYCLE[nextIdx];
+    return runSearch({
+      ...state,
+      sortOrder: newSort,
+      selectedIndex: 0,
+      listOffset: 0,
+    });
   }
 
   // Tab - cycle status filter
@@ -104,12 +169,81 @@ function handleSearchKey(
     const currentIdx = STATUS_FILTERS.indexOf(state.statusFilter);
     const nextIdx = (currentIdx + 1) % STATUS_FILTERS.length;
     const newFilter = STATUS_FILTERS[nextIdx];
-    return runSearch({ ...state, statusFilter: newFilter, selectedIndex: 0 });
+    return adjustListOffset(
+      runSearch({
+        ...state,
+        statusFilter: newFilter,
+        selectedIndex: 0,
+        listOffset: 0,
+      }),
+      listHeight,
+    );
   }
 
-  // Text input
+  // Shift-Tab - cycle filter backwards
+  if (isKey(event, Keys.Tab, { shift: true })) {
+    const currentIdx = STATUS_FILTERS.indexOf(state.statusFilter);
+    const prevIdx = (currentIdx - 1 + STATUS_FILTERS.length) %
+      STATUS_FILTERS.length;
+    const newFilter = STATUS_FILTERS[prevIdx];
+    return adjustListOffset(
+      runSearch({
+        ...state,
+        statusFilter: newFilter,
+        selectedIndex: 0,
+        listOffset: 0,
+      }),
+      listHeight,
+    );
+  }
+
+  // Clear search
+  if (isKey(event, Keys.Escape)) {
+    if (state.query) {
+      return runSearch({
+        ...state,
+        query: "",
+        cursorPos: 0,
+        selectedIndex: 0,
+        listOffset: 0,
+      });
+    }
+    return;
+  }
+
+  return;
+}
+
+// --- Search input mode (search screen, input focused) ---
+
+function handleSearchInput(
+  event: KeyEvent,
+  state: TuiState,
+  _ctx: AppContext<TuiState>,
+): TuiState | undefined {
+  // Exit search mode
+  if (isKey(event, Keys.Escape) || isKey(event, "g", { ctrl: true })) {
+    return { ...state, searchActive: false };
+  }
+
+  // Confirm search and return to browse
+  if (isKey(event, Keys.Enter)) {
+    return runSearch({
+      ...state,
+      searchActive: false,
+      selectedIndex: 0,
+      listOffset: 0,
+    });
+  }
+
+  // Text editing
   if (isKey(event, Keys.Backspace)) {
-    if (state.cursorPos === 0) return;
+    if (state.cursorPos === 0) {
+      if (state.query.length === 0) {
+        return { ...state, searchActive: false };
+      }
+      return;
+    }
     const newQuery = state.query.slice(0, state.cursorPos - 1) +
       state.query.slice(state.cursorPos);
     return runSearch({
@@ -117,11 +251,18 @@ function handleSearchKey(
       query: newQuery,
       cursorPos: state.cursorPos - 1,
       selectedIndex: 0,
+      listOffset: 0,
     });
   }
 
   if (isKey(event, "u", { ctrl: true })) {
-    return runSearch({ ...state, query: "", cursorPos: 0, selectedIndex: 0 });
+    return runSearch({
+      ...state,
+      query: "",
+      cursorPos: 0,
+      selectedIndex: 0,
+      listOffset: 0,
+    });
   }
 
   if (isKey(event, "a", { ctrl: true }) || isKey(event, Keys.Home)) {
@@ -152,6 +293,7 @@ function handleSearchKey(
       query: newQuery,
       cursorPos: state.cursorPos + 1,
       selectedIndex: 0,
+      listOffset: 0,
     });
   }
 
@@ -163,16 +305,17 @@ function runSearch(state: TuiState): TuiState {
     const db = getDbSync();
     if (!db) return state;
 
-    // Build query: status filter uses a short keyword that LIKE can match
     let query = state.query;
     if (state.statusFilter) {
-      // Use first word of status which is unique enough for LIKE
       const keyword = state.statusFilter.split(" ")[0].toLowerCase();
       query = `status:${keyword} ${query}`;
     }
 
-    const results = dbSearch(db, query || "", 100);
-    return { ...state, results, error: null };
+    const { results, total } = dbSearch(db, query || "", {
+      limit: 500,
+      orderBy: state.sortOrder,
+    });
+    return { ...state, results, totalMatches: total, error: null };
   } catch (e) {
     return { ...state, error: (e as Error).message };
   }
@@ -196,6 +339,7 @@ function handleReaderKey(
   if (
     isKey(event, Keys.Escape) ||
     (state.keymap === "vim" && isKey(event, "q")) ||
+    isKey(event, "h") || isKey(event, Keys.Left) ||
     (state.keymap === "emacs" && isKey(event, "g", { ctrl: true }))
   ) {
     if (state.history.length > 0) {
@@ -212,6 +356,8 @@ function handleReaderKey(
             lines: prepareRfcText(body),
             scrollY: 0,
             history: state.history.slice(0, -1),
+            refIndex: -1,
+            visibleRefs: [],
           };
         }
       }
@@ -220,93 +366,99 @@ function handleReaderKey(
   }
 
   // Quit
-  if (state.keymap === "emacs" && isKey(event, "c", { ctrl: true })) {
+  if (isKey(event, "c", { ctrl: true })) {
     ctx.exit();
     return;
   }
 
-  const maxScroll = Math.max(0, state.lines.length - viewportHeight(ctx));
+  const viewportHeight = ctx.size().rows - 2 - 1 - 1;
+  const maxScroll = Math.max(0, state.lines.length - viewportHeight);
 
   // Scroll
   if (
     isKey(event, Keys.Down) ||
-    (state.keymap === "vim" && isKey(event, "j")) ||
+    isKey(event, "j") ||
     (state.keymap === "emacs" && isKey(event, "n", { ctrl: true }))
   ) {
-    return { ...state, scrollY: Math.min(state.scrollY + 1, maxScroll) };
+    const newScrollY = Math.min(state.scrollY + 1, maxScroll);
+    return updateVisibleRefs({ ...state, scrollY: newScrollY, refIndex: -1 });
   }
 
   if (
     isKey(event, Keys.Up) ||
-    (state.keymap === "vim" && isKey(event, "k")) ||
+    isKey(event, "k") ||
     (state.keymap === "emacs" && isKey(event, "p", { ctrl: true }))
   ) {
-    return { ...state, scrollY: Math.max(state.scrollY - 1, 0) };
+    const newScrollY = Math.max(state.scrollY - 1, 0);
+    return updateVisibleRefs({ ...state, scrollY: newScrollY, refIndex: -1 });
   }
 
   // Half-page scroll
-  const halfPage = Math.floor(viewportHeight(ctx) / 2);
+  const halfPage = Math.floor(viewportHeight / 2);
   if (
-    (state.keymap === "vim" && isKey(event, "d", { ctrl: true })) ||
+    isKey(event, "d", { ctrl: true }) ||
     (state.keymap === "emacs" && isKey(event, "v", { ctrl: true })) ||
     isKey(event, Keys.PageDown)
   ) {
-    return { ...state, scrollY: Math.min(state.scrollY + halfPage, maxScroll) };
+    const newScrollY = Math.min(state.scrollY + halfPage, maxScroll);
+    return updateVisibleRefs({ ...state, scrollY: newScrollY, refIndex: -1 });
   }
 
   if (
-    (state.keymap === "vim" && isKey(event, "u", { ctrl: true })) ||
+    isKey(event, "u", { ctrl: true }) ||
     (state.keymap === "emacs" && event.alt && isKey(event, "v")) ||
     isKey(event, Keys.PageUp)
   ) {
-    return { ...state, scrollY: Math.max(state.scrollY - halfPage, 0) };
+    const newScrollY = Math.max(state.scrollY - halfPage, 0);
+    return updateVisibleRefs({ ...state, scrollY: newScrollY, refIndex: -1 });
   }
 
   // Top/bottom
-  if (state.keymap === "vim" && isKey(event, "g") && !event.shift) {
-    return { ...state, scrollY: 0 };
+  if (isKey(event, "g") && !event.shift) {
+    return updateVisibleRefs({ ...state, scrollY: 0, refIndex: -1 });
   }
-  if (state.keymap === "vim" && isKey(event, "G")) {
-    return { ...state, scrollY: maxScroll };
+  if (isKey(event, "G")) {
+    return updateVisibleRefs({ ...state, scrollY: maxScroll, refIndex: -1 });
   }
   if (state.keymap === "emacs" && event.alt && isKey(event, "<")) {
-    return { ...state, scrollY: 0 };
+    return updateVisibleRefs({ ...state, scrollY: 0, refIndex: -1 });
   }
   if (state.keymap === "emacs" && event.alt && isKey(event, ">")) {
-    return { ...state, scrollY: maxScroll };
+    return updateVisibleRefs({ ...state, scrollY: maxScroll, refIndex: -1 });
   }
 
   // Content search
   if (
-    (state.keymap === "vim" && isKey(event, "/")) ||
+    isKey(event, "/") ||
     (state.keymap === "emacs" && isKey(event, "s", { ctrl: true }))
   ) {
     return { ...state, contentSearchActive: true, contentSearch: "" };
   }
 
   // Next/prev match
-  if (
-    state.keymap === "vim" && isKey(event, "n") &&
-    state.contentMatches.length > 0
-  ) {
+  if (isKey(event, "n") && state.contentMatches.length > 0) {
     const next = (state.contentMatchIndex + 1) % state.contentMatches.length;
     return {
       ...state,
       contentMatchIndex: next,
-      scrollY: scrollToMatch(state.contentMatches[next], ctx),
+      scrollY: scrollToMatch(state.contentMatches[next], viewportHeight),
     };
   }
-  if (
-    state.keymap === "vim" && isKey(event, "N") &&
-    state.contentMatches.length > 0
-  ) {
+  if (isKey(event, "N") && state.contentMatches.length > 0) {
     const prev = (state.contentMatchIndex - 1 + state.contentMatches.length) %
       state.contentMatches.length;
     return {
       ...state,
       contentMatchIndex: prev,
-      scrollY: scrollToMatch(state.contentMatches[prev], ctx),
+      scrollY: scrollToMatch(state.contentMatches[prev], viewportHeight),
     };
+  }
+
+  // Cycle through RFC references with Tab
+  if (isKey(event, Keys.Tab)) {
+    if (state.visibleRefs.length === 0) return;
+    const nextRef = (state.refIndex + 1) % state.visibleRefs.length;
+    return { ...state, refIndex: nextRef };
   }
 
   // Info toggle
@@ -314,8 +466,10 @@ function handleReaderKey(
     return { ...state, showInfo: !state.showInfo };
   }
 
-  // Follow RFC reference — Enter on current viewport line
-  if (isKey(event, Keys.Enter)) {
+  // Follow RFC reference
+  if (
+    isKey(event, Keys.Enter) || isKey(event, "l") || isKey(event, Keys.Right)
+  ) {
     return followReference(state, ctx);
   }
 
@@ -361,56 +515,68 @@ function handleContentSearchKey(
 
 // --- Helpers ---
 
-function viewportHeight(ctx: AppContext<TuiState>): number {
-  return ctx.size().rows - 4; // title bar + status bar + borders
-}
-
-function scrollToMatch(lineIndex: number, ctx: AppContext<TuiState>): number {
-  const vh = viewportHeight(ctx);
-  return Math.max(0, lineIndex - Math.floor(vh / 3));
+function scrollToMatch(lineIndex: number, viewportHeight: number): number {
+  return Math.max(0, lineIndex - Math.floor(viewportHeight / 3));
 }
 
 function scrollToMatchValue(lineIndex: number): number {
-  // Approximate viewport height
   return Math.max(0, lineIndex - 10);
+}
+
+function collectVisibleRefs(state: TuiState): number[] {
+  const seen = new Set<number>();
+  const refs: number[] = [];
+  const startLine = state.scrollY;
+  const endLine = Math.min(startLine + 40, state.lines.length);
+
+  for (let i = startLine; i < endLine; i++) {
+    const lineRefs = findReferences(state.lines[i]);
+    for (const ref of lineRefs) {
+      if (ref.number !== state.currentRfc && !seen.has(ref.number)) {
+        seen.add(ref.number);
+        refs.push(ref.number);
+      }
+    }
+  }
+  return refs;
+}
+
+function updateVisibleRefs(state: TuiState): TuiState {
+  return { ...state, visibleRefs: collectVisibleRefs(state) };
 }
 
 function followReference(
   state: TuiState,
   ctx: AppContext<TuiState>,
 ): TuiState | undefined {
-  // Look at lines around current scroll position for RFC references
-  const RFC_PATTERN = /RFC\s*(\d{1,5})/gi;
-  const startLine = state.scrollY;
-  const endLine = Math.min(startLine + 30, state.lines.length);
+  let targetRef: number | undefined;
 
-  for (let i = startLine; i < endLine; i++) {
-    let match;
-    RFC_PATTERN.lastIndex = 0;
-    while ((match = RFC_PATTERN.exec(state.lines[i])) !== null) {
-      const refNum = parseInt(match[1]);
-      if (refNum !== state.currentRfc && refNum > 0) {
-        // Found a reference — navigate to it
-        const history = [...state.history];
-        if (state.currentRfc) history.push(state.currentRfc);
-
-        openRfc(refNum, "", state, ctx);
-        return {
-          ...state,
-          screen: "reader",
-          currentRfc: refNum,
-          currentTitle: "",
-          loading: true,
-          scrollY: 0,
-          history,
-          contentSearch: "",
-          contentMatches: [],
-          contentMatchIndex: 0,
-        };
-      }
-    }
+  if (state.refIndex >= 0 && state.visibleRefs[state.refIndex]) {
+    targetRef = state.visibleRefs[state.refIndex];
+  } else if (state.visibleRefs.length > 0) {
+    targetRef = state.visibleRefs[0];
   }
-  return;
+
+  if (!targetRef) return;
+
+  const history = [...state.history];
+  if (state.currentRfc) history.push(state.currentRfc);
+
+  openRfc(targetRef, "", state, ctx);
+  return {
+    ...state,
+    screen: "reader",
+    currentRfc: targetRef,
+    currentTitle: "",
+    loading: true,
+    scrollY: 0,
+    history,
+    contentSearch: "",
+    contentMatches: [],
+    contentMatchIndex: 0,
+    refIndex: -1,
+    visibleRefs: [],
+  };
 }
 
 async function openRfc(
@@ -423,7 +589,6 @@ async function openRfc(
     const text = await fetchRfc(number);
     const lines = prepareRfcText(text);
 
-    // Get title from db if not provided
     let rfcTitle = title;
     if (!rfcTitle) {
       const db = getDbSync();
@@ -433,13 +598,16 @@ async function openRfc(
       }
     }
 
-    ctx.setState((s) => ({
-      ...s,
-      lines,
-      currentTitle: rfcTitle || `RFC ${number}`,
-      loading: false,
-      error: null,
-    }));
+    ctx.setState((s) => {
+      const newState: TuiState = {
+        ...s,
+        lines,
+        currentTitle: rfcTitle || `RFC ${number}`,
+        loading: false,
+        error: null,
+      };
+      return { ...newState, visibleRefs: collectVisibleRefs(newState) };
+    });
   } catch (e) {
     ctx.setState((s) => ({
       ...s,
@@ -449,8 +617,8 @@ async function openRfc(
   }
 }
 
-// Synchronous db access (db is set once at TUI startup via setDbSync)
-import { Database } from "@db/sqlite";
+// Synchronous db access
+import type { Database } from "@db/sqlite";
 
 let _dbSync: Database | null = null;
 

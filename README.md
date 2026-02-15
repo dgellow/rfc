@@ -4,8 +4,17 @@ Read, search, and navigate IETF RFCs from your terminal.
 
 ## Install
 
+From JSR:
+
 ```
-deno install --global jsr:@dgellow/rfc
+deno install -g -A --name rfc jsr:@dgellow/rfc/cli
+```
+
+From source:
+
+```
+git clone https://github.com/dgellow/rfc && cd rfc
+deno task install
 ```
 
 ## Usage
@@ -32,14 +41,27 @@ rfc search status:standard wg:httpbis
 rfc search year:2022 TLS
 ```
 
+CLI output is colored by default. Respects `$NO_COLOR`. Use `--no-color` to disable.
+
 ### TUI
 
-`rfc` with no arguments opens an interactive interface with search, filtering by
-status, an RFC reader with in-document search, metadata panel, and
-cross-reference navigation.
+`rfc` with no arguments opens an interactive browser.
 
-Supports vim (default) and emacs keybindings. Set `RFC_KEYMAP=emacs` or press
-`?` for help.
+- `/` to search, `j`/`k` to navigate, `Enter` to open
+- `Tab` to filter by status, `s` to cycle sort order
+- `i` for metadata panel, `?` for full keybindings
+- In-document search, cross-reference navigation, history
+
+Supports vim (default) and emacs keybindings. Set `RFC_KEYMAP=emacs`.
+
+### Library
+
+```ts
+import { ensureIndex, search, getRfc } from "jsr:@dgellow/rfc";
+
+const db = await ensureIndex();
+const { results } = search(db, "HTTP semantics", { orderBy: "relevance" });
+```
 
 ## Data
 

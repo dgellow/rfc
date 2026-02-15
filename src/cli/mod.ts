@@ -6,29 +6,33 @@ import { syncAll } from "../data/sync.ts";
 import { listCachedRfcs } from "../data/db.ts";
 import { fetchRfcToFile } from "../data/fetch.ts";
 import { ensureIndex } from "../data/index.ts";
+import { c } from "./color.ts";
 
-const HELP = `rfc — Read, search, and navigate IETF RFCs
+const HELP = `${c.boldCyan("rfc")} ${
+  c.dim("—")
+} Read, search, and navigate IETF RFCs
 
-Usage:
-  rfc                      Open interactive TUI
-  rfc <number>             Read an RFC in $PAGER
-  rfc search <query>       Search RFCs (title, keywords, content)
-  rfc info <number>        Show RFC metadata
-  rfc sync                 Download all RFCs via rsync
-  rfc sync --index         Only refresh the metadata index
-  rfc list                 List locally cached RFCs
-  rfc path <number>        Print local file path for an RFC
+${c.boldWhite("Usage:")}
+  ${c.cyan("rfc")}                      Open interactive TUI
+  ${c.cyan("rfc")} <number>             Read an RFC in $PAGER
+  ${c.cyan("rfc search")} <query>       Search RFCs
+  ${c.cyan("rfc info")} <number>        Show RFC metadata
+  ${c.cyan("rfc sync")}                 Download all RFCs via rsync
+  ${c.cyan("rfc sync --index")}         Only refresh the metadata index
+  ${c.cyan("rfc list")}                 List locally cached RFCs
+  ${c.cyan("rfc path")} <number>        Print local file path for an RFC
 
-Search query syntax:
-  rfc search HTTP/2                Free text search
-  rfc search author:fielding       Search by author
-  rfc search status:standard       Search by status
-  rfc search wg:httpbis            Search by working group
-  rfc search year:2022             Search by year
-  rfc search author:fielding HTTP  Combined filters
+${c.boldWhite("Search syntax:")}
+  rfc search HTTP/2                ${c.dim("Free text search")}
+  rfc search author:fielding       ${c.dim("Search by author")}
+  rfc search status:standard       ${c.dim("Search by status")}
+  rfc search wg:httpbis            ${c.dim("Search by working group")}
+  rfc search year:2022             ${c.dim("Search by year")}
+  rfc search author:fielding HTTP  ${c.dim("Combined filters")}
 
-Options:
+${c.boldWhite("Options:")}
   --help, -h    Show this help
+  --no-color    Disable colored output
 `;
 
 export async function runCli(args: string[]): Promise<boolean> {
@@ -54,7 +58,7 @@ export async function runCli(args: string[]): Promise<boolean> {
     case "search": {
       const query = args.slice(1).join(" ");
       if (!query) {
-        console.error("Usage: rfc search <query>");
+        console.error(c.boldRed("Usage:") + " rfc search <query>");
         Deno.exit(1);
       }
       await searchCommand(query);
@@ -64,7 +68,7 @@ export async function runCli(args: string[]): Promise<boolean> {
     case "info": {
       const n = parseInt(args[1]);
       if (isNaN(n)) {
-        console.error("Usage: rfc info <number>");
+        console.error(c.boldRed("Usage:") + " rfc info <number>");
         Deno.exit(1);
       }
       await infoCommand(n);
@@ -85,20 +89,29 @@ export async function runCli(args: string[]): Promise<boolean> {
       const rfcs = listCachedRfcs(db);
       if (rfcs.length === 0) {
         console.log(
-          "No RFCs cached locally. Use 'rfc <number>' to fetch one, or 'rfc sync' to download all.",
+          c.dim("No RFCs cached locally.") +
+            " Use " +
+            c.cyan("rfc <number>") +
+            " to fetch one, or " +
+            c.cyan("rfc sync") +
+            " to download all.",
         );
         return true;
       }
       for (const meta of rfcs) {
-        console.log(`RFC ${String(meta.number).padEnd(5)} ${meta.title}`);
+        console.log(
+          c.boldCyan(`RFC ${String(meta.number).padEnd(5)}`) +
+            ` ${meta.title}`,
+        );
       }
+      console.log(c.dim(`\n${rfcs.length} cached`));
       return true;
     }
 
     case "path": {
       const n = parseInt(args[1]);
       if (isNaN(n)) {
-        console.error("Usage: rfc path <number>");
+        console.error(c.boldRed("Usage:") + " rfc path <number>");
         Deno.exit(1);
       }
       await ensureIndex();
@@ -108,8 +121,8 @@ export async function runCli(args: string[]): Promise<boolean> {
     }
 
     default:
-      console.error(`Unknown command: ${first}`);
-      console.error("Run 'rfc --help' for usage.");
+      console.error(c.boldRed(`Unknown command: ${first}`));
+      console.error("Run " + c.cyan("rfc --help") + " for usage.");
       Deno.exit(1);
   }
 }
