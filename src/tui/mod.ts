@@ -174,7 +174,7 @@ function renderHelp(state: TuiState): Component {
 
   return Center({
     child: Box({
-      border: "rounded",
+      border: "single",
       borderColor: colors.fg.hex("#555555"),
       title: "Help",
       fill: " ",

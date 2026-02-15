@@ -119,7 +119,7 @@ export function renderInfoPanel(
   };
 
   return Box({
-    border: "rounded",
+    border: "single",
     borderColor: colors.fg.hex("#555555"),
     title: `RFC ${number}`,
     fill: " ",

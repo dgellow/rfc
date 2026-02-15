@@ -10,6 +10,7 @@ import {
   upsertRfc,
 } from "./db.ts";
 import type { RfcMeta, RfcRelation, RfcStatus, RfcStream } from "../types.ts";
+import { c } from "../cli/color.ts";
 
 export async function ensureIndex(): Promise<Database> {
   const db = await getDb();
@@ -30,25 +31,29 @@ export async function ensureIndex(): Promise<Database> {
 export async function syncIndex(db?: Database): Promise<void> {
   db = db ?? await getDb();
 
-  console.error("Fetching RFC index...");
+  console.error(c.cyan("Fetching RFC index..."));
 
   const headers: Record<string, string> = {};
   const etag = getMeta(db, "index_etag");
   if (etag) headers["If-None-Match"] = etag;
 
   const lastSync = getMeta(db, "index_last_sync");
-  if (lastSync) headers["If-Modified-Since"] = new Date(lastSync).toUTCString();
+  if (lastSync) {
+    headers["If-Modified-Since"] = new Date(lastSync).toUTCString();
+  }
 
   const resp = await fetch(RFC_INDEX_URL, { headers });
 
   if (resp.status === 304) {
-    console.error("Index is up to date.");
+    console.error(c.green("Index up to date."));
     setMeta(db, "index_last_sync", new Date().toISOString());
     return;
   }
 
   if (!resp.ok) {
-    throw new Error(`Failed to fetch index: ${resp.status} ${resp.statusText}`);
+    throw new Error(
+      `Failed to fetch index: ${resp.status} ${resp.statusText}`,
+    );
   }
 
   const xml = await resp.text();
@@ -74,7 +79,9 @@ export async function syncIndex(db?: Database): Promise<void> {
   try {
     let count = 0;
     for (const entry of rfcEntries) {
-      const { meta, relations } = parseEntry(entry as Record<string, unknown>);
+      const { meta, relations } = parseEntry(
+        entry as Record<string, unknown>,
+      );
       if (meta) {
         upsertRfc(db, meta);
         if (relations.length) upsertRelations(db, relations);
@@ -82,7 +89,9 @@ export async function syncIndex(db?: Database): Promise<void> {
       }
     }
     db.exec("COMMIT");
-    console.error(`Indexed ${count} RFCs.`);
+    console.error(
+      c.green("Done.") + ` Indexed ${c.boldCyan(String(count))} RFCs.`,
+    );
   } catch (e) {
     db.exec("ROLLBACK");
     throw e;

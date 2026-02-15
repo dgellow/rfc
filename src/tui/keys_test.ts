@@ -2,7 +2,7 @@ import { assertEquals } from "@std/assert";
 import { TestDriver } from "@dgellow/weew";
 import { Database } from "@db/sqlite";
 import { initialState, type TuiState } from "./state.ts";
-import { handleKey, setAsyncUpdater, setDbSync } from "./keys.ts";
+import { handleKey, setAsyncUpdater, setDbSync, setFetchRfc } from "./keys.ts";
 import { renderSearchScreen } from "./views/search.ts";
 import { renderReaderScreen } from "./views/reader.ts";
 import type { SearchResult } from "../types.ts";
@@ -143,6 +143,7 @@ let state: TuiState;
 function makeDriver(overrides?: Partial<TuiState>): TestDriver {
   state = {
     ...initialState(),
+    keymap: "vim",
     results: defaultResults,
     totalMatches: defaultResults.length,
     indexTotal: defaultResults.length,
@@ -176,6 +177,7 @@ let db: Database;
 function setup() {
   db = createTestDb();
   setDbSync(db);
+  setFetchRfc((_n: number) => Promise.resolve("Mock RFC body\nLine 2\nLine 3"));
 }
 
 function teardown() {
@@ -290,41 +292,29 @@ Deno.test("browse: q quits", () => {
   }
 });
 
-Deno.test({
-  name: "browse: Enter opens RFC",
-  // openRfc triggers async fetch that we can't await in the test
-  sanitizeOps: false,
-  sanitizeResources: false,
-  fn() {
-    setup();
-    try {
-      const driver = makeDriver();
-      assertEquals(state.screen, "search");
-      driver.sendKey("Enter");
-      assertEquals(state.screen, "reader");
-      assertEquals(state.currentRfc, 9999);
-      assertEquals(state.loading, true);
-    } finally {
-      teardown();
-    }
-  },
+Deno.test("browse: Enter opens RFC", () => {
+  setup();
+  try {
+    const driver = makeDriver();
+    assertEquals(state.screen, "search");
+    driver.sendKey("Enter");
+    assertEquals(state.screen, "reader");
+    assertEquals(state.currentRfc, 9999);
+    assertEquals(state.loading, true);
+  } finally {
+    teardown();
+  }
 });
 
-Deno.test({
-  name: "browse: g goes to top",
-  // previous test's async fetch can leak here
-  sanitizeOps: false,
-  sanitizeResources: false,
-  fn() {
-    setup();
-    try {
-      const driver = makeDriver({ selectedIndex: 2 });
-      driver.sendKey("g");
-      assertEquals(state.selectedIndex, 0);
-    } finally {
-      teardown();
-    }
-  },
+Deno.test("browse: g goes to top", () => {
+  setup();
+  try {
+    const driver = makeDriver({ selectedIndex: 2 });
+    driver.sendKey("g");
+    assertEquals(state.selectedIndex, 0);
+  } finally {
+    teardown();
+  }
 });
 
 Deno.test("browse: i toggles info panel", () => {

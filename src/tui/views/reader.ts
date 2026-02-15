@@ -1,5 +1,4 @@
 import {
-  Box,
   colors,
   Column,
   type Component,
@@ -16,55 +15,45 @@ export function renderReaderScreen(
   ctx: RenderContext,
 ): Component {
   if (state.loading) {
-    return Box({
-      border: "rounded",
-      borderColor: colors.fg.hex("#444444"),
-      title: `RFC ${state.currentRfc}`,
-      child: Column([
-        { component: Text(""), flex: 1 },
-        {
-          component: Row([
-            { component: Text(""), flex: 1 },
-            {
-              component: Text({
-                content: `Fetching RFC ${state.currentRfc}...`,
-                style: { fg: colors.fg.cyan },
-              }),
-              width: 30,
-            },
-            { component: Text(""), flex: 1 },
-          ]),
-          height: 1,
-        },
-        { component: Text(""), flex: 1 },
-      ]),
-    });
+    return Column([
+      { component: Text(""), flex: 1 },
+      {
+        component: Row([
+          { component: Text(""), flex: 1 },
+          {
+            component: Text({
+              content: `Fetching RFC ${state.currentRfc}...`,
+              style: { fg: colors.fg.cyan },
+            }),
+            width: 30,
+          },
+          { component: Text(""), flex: 1 },
+        ]),
+        height: 1,
+      },
+      { component: Text(""), flex: 1 },
+    ]);
   }
 
   if (state.error) {
-    return Box({
-      border: "rounded",
-      borderColor: colors.fg.red,
-      title: `RFC ${state.currentRfc}`,
-      child: Column([
-        { component: Text(""), flex: 1 },
-        {
-          component: Text({
-            content: `  Error: ${state.error}`,
-            style: { fg: colors.fg.red },
-          }),
-          height: 1,
-        },
-        {
-          component: Text({
-            content: "  Press Esc to go back",
-            style: { fg: colors.fg.gray },
-          }),
-          height: 1,
-        },
-        { component: Text(""), flex: 1 },
-      ]),
-    });
+    return Column([
+      { component: Text(""), flex: 1 },
+      {
+        component: Text({
+          content: `  Error: ${state.error}`,
+          style: { fg: colors.fg.red },
+        }),
+        height: 1,
+      },
+      {
+        component: Text({
+          content: "  Press Esc to go back",
+          style: { fg: colors.fg.gray },
+        }),
+        height: 1,
+      },
+      { component: Text(""), flex: 1 },
+    ]);
   }
 
   // Title bar
@@ -73,8 +62,8 @@ export function renderReaderScreen(
     : `RFC ${state.currentRfc}`;
 
   // Determine how much space content gets
-  // Border: 2 rows, title row: 1, divider: 1, status bar: 1 = 5 overhead
-  const contentHeight = ctx.height - 2 - 1 - 1;
+  // Title: 1, divider: 1, status bar: 1 = 3 overhead
+  const contentHeight = ctx.height - 1 - 1 - 1;
 
   // Render only visible lines (performance: don't iterate all 10k+ lines)
   const rfcContent: Component = {
@@ -92,22 +81,34 @@ export function renderReaderScreen(
         const isCurrentMatch = lineIdx === currentMatchLine;
         const isMatch = matchSet.has(lineIdx);
 
-        if (isCurrentMatch) {
-          canvas.fill(rect.x, y, rect.width, 1, " ", {
-            bg: colors.bg.hex("#665500"),
-          });
+        if (isCurrentMatch || isMatch) {
+          const dimBg = isCurrentMatch
+            ? colors.bg.hex("#1a1a00")
+            : colors.bg.hex("#111100");
+          canvas.fill(rect.x, y, rect.width, 1, " ", { bg: dimBg });
           canvas.text(rect.x, y, line, {
-            fg: colors.fg.hex("#ffdd55"),
-            bg: colors.bg.hex("#665500"),
-            style: "\x1b[1m",
+            fg: colors.fg.hex("#999999"),
+            bg: dimBg,
           });
-        } else if (isMatch) {
-          canvas.fill(rect.x, y, rect.width, 1, " ", {
-            bg: colors.bg.hex("#2a2a00"),
-          });
-          canvas.text(rect.x, y, line, {
-            bg: colors.bg.hex("#2a2a00"),
-          });
+          // Highlight actual matched text
+          if (state.contentSearch) {
+            const lower = line.toLowerCase();
+            const needle = state.contentSearch.toLowerCase();
+            let pos = 0;
+            while ((pos = lower.indexOf(needle, pos)) !== -1) {
+              const matchText = line.slice(pos, pos + needle.length);
+              canvas.text(rect.x + pos, y, matchText, {
+                fg: isCurrentMatch
+                  ? colors.fg.hex("#ffdd55")
+                  : colors.fg.hex("#ddaa33"),
+                bg: isCurrentMatch
+                  ? colors.bg.hex("#665500")
+                  : colors.bg.hex("#332200"),
+                style: "\x1b[1m",
+              });
+              pos += needle.length;
+            }
+          }
         } else {
           // Check for RFC references to highlight
           const refs = findReferences(line);
@@ -179,9 +180,11 @@ export function renderReaderScreen(
     ? `ref: RFC ${state.visibleRefs[state.refIndex]}  `
     : "";
 
+  const searchKey = state.keymap === "vim" ? "/" : "C-s";
+  const matchHint = state.contentMatches.length > 0 ? "  n/p match" : "";
   const hints = state.keymap === "vim"
-    ? "j/k \u2195  Ctrl-d/u \u21c5  / search  i info  ? help  K keymap  q back"
-    : "C-n/C-p \u2195  C-v/M-v \u21c5  C-s search  i info  ? help  K keymap  C-g back";
+    ? `j/k \u2195  Ctrl-d/u \u21c5  ${searchKey} search${matchHint}  i info  ? help  K keymap  q back`
+    : `C-n/C-p \u2195  C-v/M-v \u21c5  ${searchKey} search${matchHint}  i info  ? help  K keymap  C-g back`;
 
   // Scrollbar
   const scrollbarComponent: Component = {
@@ -189,69 +192,100 @@ export function renderReaderScreen(
       if (state.lines.length <= contentHeight) return;
 
       const trackHeight = rect.height;
+      const totalLines = state.lines.length;
       const scrollRatio = state.scrollY /
-        Math.max(1, state.lines.length - contentHeight);
+        Math.max(1, totalLines - contentHeight);
       const thumbSize = Math.max(
         1,
-        Math.floor((contentHeight / state.lines.length) * trackHeight),
+        Math.floor((contentHeight / totalLines) * trackHeight),
       );
       const thumbPos = Math.floor(
         Math.min(scrollRatio, 1) * (trackHeight - thumbSize),
       );
 
+      // Pre-compute which scrollbar rows have matches
+      const matchRows = new Set<number>();
+      const currentMatchLine = state.contentMatches[state.contentMatchIndex] ??
+        -1;
+      let currentMatchRow = -1;
+      for (const lineIdx of state.contentMatches) {
+        const row = Math.floor((lineIdx / totalLines) * trackHeight);
+        matchRows.add(row);
+        if (lineIdx === currentMatchLine) currentMatchRow = row;
+      }
+
       for (let i = 0; i < trackHeight; i++) {
         const isThumb = i >= thumbPos && i < thumbPos + thumbSize;
-        canvas.set(rect.x, rect.y + i, {
-          char: isThumb ? "\u2588" : "\u2591",
-          fg: isThumb ? colors.fg.hex("#555555") : colors.fg.hex("#222222"),
-        });
+        const isCurrentMatch = i === currentMatchRow;
+        const isMatch = matchRows.has(i);
+
+        if (isCurrentMatch) {
+          canvas.set(rect.x, rect.y + i, {
+            char: isThumb ? "\u2588" : "\u2500",
+            fg: colors.fg.hex("#ffdd55"),
+          });
+        } else if (isMatch) {
+          canvas.set(rect.x, rect.y + i, {
+            char: isThumb ? "\u2588" : "\u2500",
+            fg: isThumb ? colors.fg.hex("#886600") : colors.fg.hex("#665500"),
+          });
+        } else {
+          canvas.set(rect.x, rect.y + i, {
+            char: isThumb ? "\u2588" : "\u2591",
+            fg: isThumb ? colors.fg.hex("#555555") : colors.fg.hex("#222222"),
+          });
+        }
       }
     },
   };
 
-  return Box({
-    border: "rounded",
-    borderColor: colors.fg.hex("#444444"),
-    title: titleText.length > ctx.width - 4
-      ? titleText.slice(0, ctx.width - 7) + "\u2026"
-      : titleText,
-    child: Column([
-      {
-        component: Row([
-          { component: rfcContent, flex: 1 },
-          { component: scrollbarComponent, width: 1 },
-        ]),
-        flex: 1,
-      },
-      {
-        component: Divider({
-          char: "\u2500",
-          style: { fg: colors.fg.hex("#333333") },
-        }),
-        height: 1,
-      },
-      {
-        component: Row([
-          {
-            component: Text({
-              content: historyBreadcrumb
-                ? `${historyBreadcrumb}${state.currentRfc}  ${statusLeft}`
-                : `${refHint}${statusLeft}`,
-              style: { fg: colors.fg.hex("#888888") },
-            }),
-            flex: 1,
-          },
-          {
-            component: Text({
-              content: hints,
-              style: { fg: colors.fg.hex("#555555") },
-              align: "right",
-            }),
-            flex: 1,
-          },
-        ]),
-        height: 1,
-      },
-    ]),
-  });
+  const displayTitle = titleText.length > ctx.width - 2
+    ? titleText.slice(0, ctx.width - 3) + "\u2026"
+    : titleText;
+
+  return Column([
+    {
+      component: Text({
+        content: displayTitle,
+        style: { fg: colors.fg.hex("#888888") },
+      }),
+      height: 1,
+    },
+    {
+      component: Row([
+        { component: rfcContent, flex: 1 },
+        { component: scrollbarComponent, width: 1 },
+      ]),
+      flex: 1,
+    },
+    {
+      component: Divider({
+        char: "\u2500",
+        style: { fg: colors.fg.hex("#333333") },
+      }),
+      height: 1,
+    },
+    {
+      component: Row([
+        {
+          component: Text({
+            content: historyBreadcrumb
+              ? `${historyBreadcrumb}${state.currentRfc}  ${statusLeft}`
+              : `${refHint}${statusLeft}`,
+            style: { fg: colors.fg.hex("#888888") },
+          }),
+          flex: 1,
+        },
+        {
+          component: Text({
+            content: hints,
+            style: { fg: colors.fg.hex("#555555") },
+            align: "right",
+          }),
+          flex: 1,
+        },
+      ]),
+      height: 1,
+    },
+  ]);
 }

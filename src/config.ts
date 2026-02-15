@@ -6,10 +6,6 @@ function getCacheDir(): string {
 
   const home = Deno.env.get("HOME");
   if (!home) throw new Error("Cannot determine home directory");
-
-  if (Deno.build.os === "darwin") {
-    return join(home, "Library", "Caches", "rfc");
-  }
   return join(home, ".cache", "rfc");
 }
 

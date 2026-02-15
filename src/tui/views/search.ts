@@ -1,6 +1,5 @@
 import {
   Badge,
-  Box,
   colors,
   Column,
   type Component,
@@ -41,6 +40,7 @@ export function renderSearchScreen(
   state: TuiState,
   _ctx: RenderContext,
 ): Component {
+  const searchKey = state.keymap === "emacs" ? "C-s" : "/";
   // Filter badges
   const filterRow = Row(
     STATUS_LABELS.map((f) => ({
@@ -106,7 +106,7 @@ export function renderSearchScreen(
     searchBar = Row([
       {
         component: Text({
-          content: "/ to search",
+          content: `${searchKey} to search`,
           style: { fg: colors.fg.hex("#555555") },
         }),
         flex: 1,
@@ -141,7 +141,7 @@ export function renderSearchScreen(
     : state.results.length === 0
     ? {
       render(canvas, rect) {
-        const msg = state.query ? "No results" : "/ to search";
+        const msg = state.query ? "No results" : `${searchKey} to search`;
         const msgY = Math.floor(rect.height / 3);
         const msgX = Math.floor((rect.width - msg.length) / 2);
         canvas.text(rect.x + Math.max(0, msgX), rect.y + msgY, msg, {
@@ -175,41 +175,48 @@ export function renderSearchScreen(
   // Title with count
   const title = countText ? `rfc \u2014 ${countText}` : "rfc";
 
-  return Box({
-    border: "rounded",
-    borderColor: state.searchActive ? colors.fg.cyan : colors.fg.hex("#444444"),
-    title,
-    child: Column([
-      { component: searchBar, height: 1 },
-      { component: filterRow, height: 1 },
-      {
-        component: Divider({
-          char: "\u2500",
-          style: {
-            fg: colors.fg.hex("#333333"),
-          },
-        }),
-        height: 1,
-      },
-      { component: resultList, flex: 1 },
-      {
-        component: Divider({
-          char: "\u2500",
-          style: {
-            fg: colors.fg.hex("#333333"),
-          },
-        }),
-        height: 1,
-      },
-      {
-        component: Text({
-          content: hints,
-          style: { fg: colors.fg.hex("#555555") },
-        }),
-        height: 1,
-      },
-    ]),
-  });
+  return Column([
+    {
+      component: Row([
+        {
+          component: Text({
+            content: title,
+            style: { fg: colors.fg.hex("#888888") },
+          }),
+          flex: 1,
+        },
+      ]),
+      height: 1,
+    },
+    { component: searchBar, height: 1 },
+    { component: filterRow, height: 1 },
+    {
+      component: Divider({
+        char: "\u2500",
+        style: {
+          fg: colors.fg.hex("#333333"),
+        },
+      }),
+      height: 1,
+    },
+    { component: resultList, flex: 1 },
+    {
+      component: Divider({
+        char: "\u2500",
+        style: {
+          fg: colors.fg.hex("#333333"),
+        },
+      }),
+      height: 1,
+    },
+    {
+      component: Text({
+        content: hints,
+        style: { fg: colors.fg.hex("#555555") },
+      }),
+      height: 1,
+    },
+  ]);
 }
 
 /** Ensure selectedIndex is visible within the list viewport */

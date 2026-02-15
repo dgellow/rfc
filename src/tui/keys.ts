@@ -3,7 +3,7 @@ import { isKey, Keys, TextInput } from "@dgellow/weew";
 import type { Keymap, SortOrder, TuiState } from "./state.ts";
 import { saveConfig } from "./config.ts";
 import { getRfc, getRfcBody, search as dbSearch } from "../data/db.ts";
-import { fetchRfc } from "../data/fetch.ts";
+import { fetchRfc as _fetchRfc } from "../data/fetch.ts";
 import {
   findMatchingLines,
   findReferences,
@@ -66,7 +66,7 @@ function handleBrowseKey(
   state: TuiState,
   ctx: AppContext,
 ): TuiState | undefined {
-  const listHeight = ctx.size().rows - 2 - 1 - 1 - 1 - 1;
+  const listHeight = ctx.size().rows - 1 - 1 - 1 - 1 - 1 - 1;
 
   // Quit
   if (
@@ -85,7 +85,7 @@ function handleBrowseKey(
   // Navigation — all guards check for empty results
   if (
     isKey(event, Keys.Down) ||
-    isKey(event, "j") ||
+    (state.keymap === "vim" && isKey(event, "j")) ||
     (state.keymap === "emacs" && isKey(event, "n", { ctrl: true }))
   ) {
     if (state.results.length === 0) return;
@@ -95,7 +95,7 @@ function handleBrowseKey(
 
   if (
     isKey(event, Keys.Up) ||
-    isKey(event, "k") ||
+    (state.keymap === "vim" && isKey(event, "k")) ||
     (state.keymap === "emacs" && isKey(event, "p", { ctrl: true }))
   ) {
     if (state.results.length === 0) return;
@@ -124,12 +124,50 @@ function handleBrowseKey(
     return adjustListOffset({ ...state, selectedIndex: prev }, listHeight);
   }
 
+  // Emacs C-v / M-v: move cursor to edge of visible area first, then page
+  if (state.keymap === "emacs" && isKey(event, "v", { ctrl: true })) {
+    if (state.results.length === 0) return;
+    const bottomVisible = Math.min(
+      state.listOffset + listHeight - 1,
+      state.results.length - 1,
+    );
+    if (state.selectedIndex < bottomVisible) {
+      return adjustListOffset(
+        { ...state, selectedIndex: bottomVisible },
+        listHeight,
+      );
+    }
+    const next = Math.min(
+      state.selectedIndex + listHeight,
+      state.results.length - 1,
+    );
+    return adjustListOffset({ ...state, selectedIndex: next }, listHeight);
+  }
+  if (state.keymap === "emacs" && event.alt && isKey(event, "v")) {
+    if (state.results.length === 0) return;
+    const topVisible = state.listOffset;
+    if (state.selectedIndex > topVisible) {
+      return adjustListOffset(
+        { ...state, selectedIndex: topVisible },
+        listHeight,
+      );
+    }
+    const prev = Math.max(state.selectedIndex - listHeight, 0);
+    return adjustListOffset({ ...state, selectedIndex: prev }, listHeight);
+  }
+
   // Top/bottom
-  if (isKey(event, "g")) {
+  if (
+    (state.keymap === "vim" && isKey(event, "g")) ||
+    (state.keymap === "emacs" && event.alt && isKey(event, "<"))
+  ) {
     if (state.results.length === 0) return;
     return adjustListOffset({ ...state, selectedIndex: 0 }, listHeight);
   }
-  if (isKey(event, "G")) {
+  if (
+    (state.keymap === "vim" && isKey(event, "G")) ||
+    (state.keymap === "emacs" && event.alt && isKey(event, ">"))
+  ) {
     if (state.results.length === 0) return;
     const last = state.results.length - 1;
     return adjustListOffset({ ...state, selectedIndex: last }, listHeight);
@@ -137,7 +175,9 @@ function handleBrowseKey(
 
   // Open RFC
   if (
-    isKey(event, Keys.Enter) || isKey(event, "l") || isKey(event, Keys.Right)
+    isKey(event, Keys.Enter) ||
+    (state.keymap === "vim" && isKey(event, "l")) ||
+    isKey(event, Keys.Right)
   ) {
     if (state.results.length === 0) return;
     const result = state.results[state.selectedIndex];
@@ -314,7 +354,8 @@ function handleReaderKey(
   if (
     isKey(event, Keys.Escape) ||
     (state.keymap === "vim" && isKey(event, "q")) ||
-    isKey(event, "h") || isKey(event, Keys.Left) ||
+    (state.keymap === "vim" && isKey(event, "h")) ||
+    isKey(event, Keys.Left) ||
     (state.keymap === "emacs" && isKey(event, "g", { ctrl: true }))
   ) {
     if (state.history.length > 0) {
@@ -352,13 +393,13 @@ function handleReaderKey(
     return;
   }
 
-  const viewportHeight = ctx.size().rows - 2 - 1 - 1;
+  const viewportHeight = ctx.size().rows - 1 - 1 - 1;
   const maxScroll = Math.max(0, state.lines.length - viewportHeight);
 
   // Scroll
   if (
     isKey(event, Keys.Down) ||
-    isKey(event, "j") ||
+    (state.keymap === "vim" && isKey(event, "j")) ||
     (state.keymap === "emacs" && isKey(event, "n", { ctrl: true }))
   ) {
     const newScrollY = Math.min(state.scrollY + 1, maxScroll);
@@ -367,7 +408,7 @@ function handleReaderKey(
 
   if (
     isKey(event, Keys.Up) ||
-    isKey(event, "k") ||
+    (state.keymap === "vim" && isKey(event, "k")) ||
     (state.keymap === "emacs" && isKey(event, "p", { ctrl: true }))
   ) {
     const newScrollY = Math.max(state.scrollY - 1, 0);
@@ -395,10 +436,10 @@ function handleReaderKey(
   }
 
   // Top/bottom
-  if (isKey(event, "g")) {
+  if (state.keymap === "vim" && isKey(event, "g")) {
     return updateVisibleRefs({ ...state, scrollY: 0, refIndex: -1 });
   }
-  if (isKey(event, "G")) {
+  if (state.keymap === "vim" && isKey(event, "G")) {
     return updateVisibleRefs({ ...state, scrollY: maxScroll, refIndex: -1 });
   }
   if (state.keymap === "emacs" && event.alt && isKey(event, "<")) {
@@ -410,7 +451,7 @@ function handleReaderKey(
 
   // Content search
   if (
-    isKey(event, "/") ||
+    (state.keymap === "vim" && isKey(event, "/")) ||
     (state.keymap === "emacs" && isKey(event, "s", { ctrl: true }))
   ) {
     return { ...state, contentSearchActive: true, contentSearch: "" };
@@ -425,7 +466,10 @@ function handleReaderKey(
       scrollY: scrollToMatch(state.contentMatches[next], viewportHeight),
     };
   }
-  if (isKey(event, "N") && state.contentMatches.length > 0) {
+  if (
+    (isKey(event, "N") || isKey(event, "p")) &&
+    state.contentMatches.length > 0
+  ) {
     const prev = (state.contentMatchIndex - 1 + state.contentMatches.length) %
       state.contentMatches.length;
     return {
@@ -449,7 +493,9 @@ function handleReaderKey(
 
   // Follow RFC reference
   if (
-    isKey(event, Keys.Enter) || isKey(event, "l") || isKey(event, Keys.Right)
+    isKey(event, Keys.Enter) ||
+    (state.keymap === "vim" && isKey(event, "l")) ||
+    isKey(event, Keys.Right)
   ) {
     return followReference(state);
   }
@@ -566,7 +612,7 @@ async function openRfc(
 ): Promise<void> {
   const generation = ++_openRfcGeneration;
   try {
-    const text = await fetchRfc(number);
+    const text = await _fetchRfcFn(number);
     if (generation !== _openRfcGeneration) return;
     const lines = prepareRfcText(text);
 
@@ -617,6 +663,13 @@ function asyncUpdate(fn: (s: TuiState) => TuiState): void {
 
 // Generation counter: prevents stale async openRfc updates from applying
 let _openRfcGeneration = 0;
+
+// Injectable fetch for testing
+let _fetchRfcFn: (number: number) => Promise<string> = _fetchRfc;
+
+export function setFetchRfc(fn: (number: number) => Promise<string>): void {
+  _fetchRfcFn = fn;
+}
 
 // Synchronous db access
 import type { Database } from "@db/sqlite";

@@ -12,15 +12,11 @@ function getConfigDir(): string {
 
   const home = Deno.env.get("HOME");
   if (!home) throw new Error("Cannot determine home directory");
-
-  if (Deno.build.os === "darwin") {
-    return join(home, "Library", "Application Support", "rfc");
-  }
   return join(home, ".config", "rfc");
 }
 
 const CONFIG_DIR = getConfigDir();
-const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
 export function loadConfig(): TuiConfig {
   try {

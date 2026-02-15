@@ -7,6 +7,8 @@ import { listCachedRfcs } from "../data/db.ts";
 import { fetchRfcToFile } from "../data/fetch.ts";
 import { ensureIndex } from "../data/index.ts";
 import { c } from "./color.ts";
+import { CACHE_DIR, DB_PATH } from "../config.ts";
+import { CONFIG_PATH } from "../tui/config.ts";
 import denoConfig from "../../deno.json" with { type: "json" };
 
 const HELP = `${c.boldCyan("rfc")} ${
@@ -35,6 +37,11 @@ ${c.boldWhite("Options:")}
   --help, -h       Show this help
   --version, -V    Show version
   --no-color       Disable colored output
+
+${c.boldWhite("Files:")}
+  ${c.dim("Index:")}    ${DB_PATH}
+  ${c.dim("Cache:")}    ${CACHE_DIR}
+  ${c.dim("Config:")}   ${CONFIG_PATH}
 `;
 
 export async function runCli(args: string[]): Promise<boolean> {
