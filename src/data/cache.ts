@@ -1,8 +1,8 @@
 import { ensureDir } from "@std/fs";
-import { CACHE_DIR, RFCS_DIR } from "../config.ts";
+import { APP_DIR, RFCS_DIR } from "../config.ts";
 
 export async function ensureCacheDir(): Promise<void> {
-  await ensureDir(CACHE_DIR);
+  await ensureDir(APP_DIR);
   await ensureDir(RFCS_DIR);
 }
 

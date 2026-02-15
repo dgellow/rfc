@@ -7,7 +7,7 @@ import { listCachedRfcs } from "../data/db.ts";
 import { fetchRfcToFile } from "../data/fetch.ts";
 import { ensureIndex } from "../data/index.ts";
 import { c } from "./color.ts";
-import { CACHE_DIR, DB_PATH } from "../config.ts";
+import { APP_DIR, DB_PATH, RFCS_DIR } from "../config.ts";
 import { CONFIG_PATH } from "../tui/config.ts";
 import denoConfig from "../../deno.json" with { type: "json" };
 
@@ -22,6 +22,7 @@ ${c.boldWhite("Usage:")}
   ${c.cyan("rfc info")} <number>        Show RFC metadata
   ${c.cyan("rfc sync")}                 Download all RFCs via rsync
   ${c.cyan("rfc sync --index")}         Only refresh the metadata index
+  ${c.cyan("rfc sync --clear")}         Delete all local data
   ${c.cyan("rfc list")}                 List locally cached RFCs
   ${c.cyan("rfc path")} <number>        Print local file path for an RFC
 
@@ -39,8 +40,8 @@ ${c.boldWhite("Options:")}
   --no-color       Disable colored output
 
 ${c.boldWhite("Files:")}
+  ${c.dim("Data:")}     ${APP_DIR}
   ${c.dim("Index:")}    ${DB_PATH}
-  ${c.dim("Cache:")}    ${CACHE_DIR}
   ${c.dim("Config:")}   ${CONFIG_PATH}
 `;
 
@@ -49,12 +50,12 @@ export async function runCli(args: string[]): Promise<boolean> {
     return false; // Signal to open TUI
   }
 
-  const first = args[0];
-
-  if (first === "--help" || first === "-h") {
+  if (args.includes("--help") || args.includes("-h")) {
     console.log(HELP);
     return true;
   }
+
+  const first = args[0];
 
   if (first === "--version" || first === "-V") {
     console.log(`rfc ${denoConfig.version}`);
@@ -92,6 +93,8 @@ export async function runCli(args: string[]): Promise<boolean> {
     case "sync": {
       if (args[1] === "--index") {
         await syncIndex();
+      } else if (args[1] === "--clear") {
+        await clearData();
       } else {
         await syncAll();
       }
@@ -139,4 +142,54 @@ export async function runCli(args: string[]): Promise<boolean> {
       console.error("Run " + c.cyan("rfc --help") + " for usage.");
       Deno.exit(1);
   }
+}
+
+async function clearData(): Promise<void> {
+  const targets: { path: string; label: string }[] = [];
+
+  try {
+    await Deno.stat(DB_PATH);
+    targets.push({ path: DB_PATH, label: DB_PATH });
+  } catch { /* doesn't exist */ }
+
+  try {
+    await Deno.stat(RFCS_DIR);
+    const entries = [];
+    for await (const e of Deno.readDir(RFCS_DIR)) entries.push(e);
+    targets.push({
+      path: RFCS_DIR,
+      label: `${RFCS_DIR} (${entries.length} files)`,
+    });
+  } catch { /* doesn't exist */ }
+
+  try {
+    await Deno.stat(CONFIG_PATH);
+    targets.push({ path: CONFIG_PATH, label: CONFIG_PATH });
+  } catch { /* doesn't exist */ }
+
+  if (targets.length === 0) {
+    console.error("Nothing to delete — no local data found.");
+    return;
+  }
+
+  console.error("This will delete:");
+  for (const t of targets) {
+    console.error(`  - ${t.label}`);
+  }
+  console.error("");
+
+  const buf = new Uint8Array(1);
+  Deno.stdout.writeSync(new TextEncoder().encode("Continue? [y/N] "));
+  await Deno.stdin.read(buf);
+  const answer = new TextDecoder().decode(buf).trim().toLowerCase();
+
+  if (answer !== "y") {
+    console.error("Aborted.");
+    return;
+  }
+
+  for (const t of targets) {
+    await Deno.remove(t.path, { recursive: true });
+  }
+  console.error("Deleted.");
 }

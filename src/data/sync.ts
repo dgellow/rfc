@@ -7,7 +7,6 @@ import {
   updateRfcBody,
 } from "./db.ts";
 import { syncIndex } from "./index.ts";
-import { c } from "../cli/color.ts";
 
 export async function syncAll(): Promise<void> {
   await ensureCacheDir();
@@ -28,32 +27,28 @@ export async function syncAll(): Promise<void> {
 
   const child = cmd.spawn();
 
-  // Stream stdout, count transferred files and show progress
+  let fileCount = 0;
+  const stopSpinner = startSpinner(() =>
+    fileCount > 0 ? `Syncing RFCs (${fileCount} new)...` : "Syncing RFCs..."
+  );
+
   const reader = child.stdout.getReader();
   const decoder = new TextDecoder();
-  let fileCount = 0;
-  const frames = ["\u280B", "\u2819", "\u2838", "\u2834", "\u2826", "\u2827"];
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       const text = decoder.decode(value, { stream: true });
-      const lines = text.split("\n");
-      for (const line of lines) {
+      for (const line of text.split("\n")) {
         if (line.match(/^rfc\d+\.txt$/)) fileCount++;
       }
-      const frame = frames[fileCount % frames.length];
-      const msg = fileCount > 0
-        ? `${frame} Syncing RFCs... ${fileCount} new files`
-        : `${frame} Syncing RFCs...`;
-      writeProgress(msg);
     }
   } finally {
     reader.releaseLock();
   }
 
+  stopSpinner();
   const output = await child.output();
-  clearProgress();
   if (!output.success) {
     const stderr = new TextDecoder().decode(output.stderr);
     throw new Error(
@@ -68,27 +63,27 @@ export async function syncAll(): Promise<void> {
   const newCount = cachedAfter - cachedBefore;
 
   if (newCount > 0) {
-    console.error(
-      c.green(`Done.`) + ` ${newCount} new RFCs, ${cachedAfter} total cached.`,
-    );
+    console.error(`${newCount} new RFCs, ${cachedAfter} total available.`);
   } else {
-    console.error(
-      c.green(`Done.`) + ` ${cachedAfter} RFCs cached, already up to date.`,
-    );
+    console.error(`${cachedAfter} RFCs available, already up to date.`);
   }
 }
 
 export async function indexLocalFiles(): Promise<void> {
   const db = await getDb();
 
-  let total = 0;
   let indexed = 0;
+  const stopSpinner = startSpinner(() =>
+    indexed > 0
+      ? `Indexing local files (${indexed})...`
+      : "Indexing local files..."
+  );
+
   for await (const entry of Deno.readDir(RFCS_DIR)) {
     if (!entry.isFile) continue;
     const match = entry.name.match(/^rfc(\d+)\.txt$/);
     if (!match) continue;
 
-    total++;
     const number = parseInt(match[1]);
 
     // Skip if already indexed
@@ -102,19 +97,21 @@ export async function indexLocalFiles(): Promise<void> {
     const text = await Deno.readTextFile(filePath);
     updateRfcBody(db, number, text);
     indexed++;
-
-    if (indexed % 500 === 0) {
-      writeProgress(`Indexing local files... ${indexed}`);
-    }
   }
 
-  if (indexed > 0) {
-    clearProgress();
-    console.error(`Indexed ${c.boldCyan(String(indexed))} local files.`);
-  }
+  stopSpinner();
 }
 
-function writeProgress(msg: string): void {
+const SPINNER_FRAMES = [
+  "\u280B",
+  "\u2819",
+  "\u2838",
+  "\u2834",
+  "\u2826",
+  "\u2827",
+];
+
+function writeSpinnerFrame(msg: string): void {
   const encoder = new TextEncoder();
   try {
     if (Deno.stderr.isTerminal()) {
@@ -125,6 +122,15 @@ function writeProgress(msg: string): void {
   }
 }
 
-function clearProgress(): void {
-  writeProgress("");
+export function startSpinner(getMessage: () => string): () => void {
+  let frame = 0;
+  const interval = setInterval(() => {
+    const spinner = SPINNER_FRAMES[frame++ % SPINNER_FRAMES.length];
+    writeSpinnerFrame(`${getMessage()} ${spinner}`);
+  }, 80);
+  return () => {
+    clearInterval(interval);
+    writeSpinnerFrame("");
+    console.error(`${getMessage()} Done.`);
+  };
 }

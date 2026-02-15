@@ -1,22 +1,13 @@
 import { join } from "@std/path";
 import { ensureDir } from "@std/fs";
+import { APP_DIR } from "../config.ts";
 import type { Keymap } from "./state.ts";
 
 interface TuiConfig {
   keymap?: Keymap;
 }
 
-function getConfigDir(): string {
-  const xdg = Deno.env.get("XDG_CONFIG_HOME");
-  if (xdg) return join(xdg, "rfc");
-
-  const home = Deno.env.get("HOME");
-  if (!home) throw new Error("Cannot determine home directory");
-  return join(home, ".config", "rfc");
-}
-
-const CONFIG_DIR = getConfigDir();
-export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+export const CONFIG_PATH = join(APP_DIR, "config.json");
 
 export function loadConfig(): TuiConfig {
   try {
@@ -28,6 +19,6 @@ export function loadConfig(): TuiConfig {
 }
 
 export async function saveConfig(config: TuiConfig): Promise<void> {
-  await ensureDir(CONFIG_DIR);
+  await ensureDir(APP_DIR);
   await Deno.writeTextFile(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
 }

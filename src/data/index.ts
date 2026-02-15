@@ -10,7 +10,7 @@ import {
   upsertRfc,
 } from "./db.ts";
 import type { RfcMeta, RfcRelation, RfcStatus, RfcStream } from "../types.ts";
-import { c } from "../cli/color.ts";
+import { startSpinner } from "./sync.ts";
 
 export async function ensureIndex(): Promise<Database> {
   const db = await getDb();
@@ -31,7 +31,7 @@ export async function ensureIndex(): Promise<Database> {
 export async function syncIndex(db?: Database): Promise<void> {
   db = db ?? await getDb();
 
-  console.error(c.cyan("Fetching RFC index..."));
+  let stopSpinner = startSpinner(() => "Fetching RFC index...");
 
   const headers: Record<string, string> = {};
   const etag = getMeta(db, "index_etag");
@@ -45,21 +45,23 @@ export async function syncIndex(db?: Database): Promise<void> {
   const resp = await fetch(RFC_INDEX_URL, { headers });
 
   if (resp.status === 304) {
-    console.error(c.green("Index up to date."));
+    stopSpinner();
+    console.error("Index already up to date.");
     setMeta(db, "index_last_sync", new Date().toISOString());
     return;
   }
 
   if (!resp.ok) {
+    stopSpinner();
     throw new Error(
       `Failed to fetch index: ${resp.status} ${resp.statusText}`,
     );
   }
 
   const xml = await resp.text();
-  console.error(
-    `Parsing index (${(xml.length / 1024 / 1024).toFixed(1)} MB)...`,
-  );
+  stopSpinner();
+
+  stopSpinner = startSpinner(() => "Updating metadata...");
 
   const newEtag = resp.headers.get("etag");
   if (newEtag) setMeta(db, "index_etag", newEtag);
@@ -73,11 +75,8 @@ export async function syncIndex(db?: Database): Promise<void> {
 
   const rfcEntries = Array.isArray(entries) ? entries : [entries];
 
-  console.error(`Indexing ${rfcEntries.length} RFCs...`);
-
   db.exec("BEGIN TRANSACTION");
   try {
-    let count = 0;
     for (const entry of rfcEntries) {
       const { meta, relations } = parseEntry(
         entry as Record<string, unknown>,
@@ -85,14 +84,12 @@ export async function syncIndex(db?: Database): Promise<void> {
       if (meta) {
         upsertRfc(db, meta);
         if (relations.length) upsertRelations(db, relations);
-        count++;
       }
     }
     db.exec("COMMIT");
-    console.error(
-      c.green("Done.") + ` Indexed ${c.boldCyan(String(count))} RFCs.`,
-    );
+    stopSpinner();
   } catch (e) {
+    stopSpinner();
     db.exec("ROLLBACK");
     throw e;
   }

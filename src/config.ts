@@ -1,17 +1,17 @@
 import { join } from "@std/path";
 
-function getCacheDir(): string {
-  const xdg = Deno.env.get("XDG_CACHE_HOME");
+function getAppDir(): string {
+  const xdg = Deno.env.get("XDG_CONFIG_HOME");
   if (xdg) return join(xdg, "rfc");
 
   const home = Deno.env.get("HOME");
   if (!home) throw new Error("Cannot determine home directory");
-  return join(home, ".cache", "rfc");
+  return join(home, ".config", "rfc");
 }
 
-export const CACHE_DIR = getCacheDir();
-export const DB_PATH = join(CACHE_DIR, "rfc.db");
-export const RFCS_DIR = join(CACHE_DIR, "rfcs");
+export const APP_DIR = getAppDir();
+export const DB_PATH = join(APP_DIR, "rfc.db");
+export const RFCS_DIR = join(APP_DIR, "rfcs");
 
 export const RFC_INDEX_URL = "https://www.rfc-editor.org/rfc-index.xml";
 export const RFC_BASE_URL = "https://www.rfc-editor.org/rfc";
