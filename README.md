@@ -5,7 +5,7 @@ Read, search, and navigate IETF RFCs from your terminal.
 ## Install
 
 ```
-deno install --allow-net --allow-read --allow-write --allow-env --allow-run --allow-ffi --name rfc main.ts
+deno install --global jsr:@dgellow/rfc
 ```
 
 ## Usage
@@ -34,13 +34,19 @@ rfc search year:2022 TLS
 
 ### TUI
 
-`rfc` with no arguments opens an interactive interface with search, filtering by status, an RFC reader with in-document search, metadata panel, and cross-reference navigation.
+`rfc` with no arguments opens an interactive interface with search, filtering by
+status, an RFC reader with in-document search, metadata panel, and
+cross-reference navigation.
 
-Supports vim (default) and emacs keybindings. Set `RFC_KEYMAP=emacs` or press `?` for help.
+Supports vim (default) and emacs keybindings. Set `RFC_KEYMAP=emacs` or press
+`?` for help.
 
 ## Data
 
-RFCs are cached locally in `~/.cache/rfc/` (Linux) or `~/Library/Caches/rfc/` (macOS). The index is fetched from [rfc-editor.org](https://www.rfc-editor.org/) on first run and refreshed daily. Individual RFCs are fetched on demand and cached permanently.
+RFCs are cached locally in `~/.cache/rfc/` (Linux) or `~/Library/Caches/rfc/`
+(macOS). The index is fetched from [rfc-editor.org](https://www.rfc-editor.org/)
+on first run and refreshed daily. Individual RFCs are fetched on demand and
+cached permanently.
 
 ## Dependencies
 
