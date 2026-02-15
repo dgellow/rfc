@@ -1,4 +1,4 @@
-import type { AppContext, KeyEvent } from "@dgellow/weew";
+import type { KeyEvent, RunControl } from "@dgellow/weew";
 import { isKey, Keys, TextInput } from "@dgellow/weew";
 import type { Keymap, SortOrder, TuiState } from "./state.ts";
 import { saveConfig } from "./config.ts";
@@ -31,7 +31,7 @@ const SORT_CYCLE: SortOrder[] = [
 export function handleKey(
   event: KeyEvent,
   state: TuiState,
-  ctx: AppContext,
+  ctx: RunControl,
 ): TuiState | undefined {
   // Global keys
   if (isKey(event, "?") && !state.searchActive && !state.contentSearchActive) {
@@ -64,7 +64,7 @@ export function handleKey(
 function handleBrowseKey(
   event: KeyEvent,
   state: TuiState,
-  ctx: AppContext,
+  ctx: RunControl,
 ): TuiState | undefined {
   const listHeight = ctx.size().rows - 1 - 1 - 1 - 1 - 1 - 1;
 
@@ -341,7 +341,7 @@ function runSearch(state: TuiState): TuiState {
 function handleReaderKey(
   event: KeyEvent,
   state: TuiState,
-  ctx: AppContext,
+  ctx: RunControl,
 ): TuiState | undefined {
   if (state.loading) return;
 
