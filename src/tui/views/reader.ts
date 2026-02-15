@@ -5,7 +5,6 @@ import {
   type Component,
   Divider,
   Row,
-  Spinner,
   Text,
 } from "@dgellow/weew";
 import type { RenderContext } from "@dgellow/weew";
@@ -27,10 +26,9 @@ export function renderReaderScreen(
           component: Row([
             { component: Text(""), flex: 1 },
             {
-              component: Spinner({
-                frame: Math.floor(Date.now() / 80),
-                label: `Fetching RFC ${state.currentRfc}...`,
-                color: colors.fg.cyan,
+              component: Text({
+                content: `Fetching RFC ${state.currentRfc}...`,
+                style: { fg: colors.fg.cyan },
               }),
               width: 30,
             },
@@ -237,7 +235,7 @@ export function renderReaderScreen(
           {
             component: Text({
               content: historyBreadcrumb
-                ? `${historyBreadcrumb}${state.currentRfc}`
+                ? `${historyBreadcrumb}${state.currentRfc}  ${statusLeft}`
                 : `${refHint}${statusLeft}`,
               style: { fg: colors.fg.hex("#888888") },
             }),
@@ -245,7 +243,7 @@ export function renderReaderScreen(
           },
           {
             component: Text({
-              content: historyBreadcrumb ? statusLeft : hints,
+              content: hints,
               style: { fg: colors.fg.hex("#555555") },
               align: "right",
             }),

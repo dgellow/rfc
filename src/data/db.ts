@@ -90,6 +90,12 @@ function migrate(db: Database): void {
       VALUES ('delete', old.number, old.title, old.authors, old.keywords, old.abstract, old.body);
     END;
   `);
+
+  // Indexes for relation lookups
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_relations_source_type ON rfc_relations(source, type);
+    CREATE INDEX IF NOT EXISTS idx_relations_target_type ON rfc_relations(target, type);
+  `);
 }
 
 // --- Metadata operations ---
@@ -227,7 +233,7 @@ export function search(
   for (const f of filters) {
     switch (f.field) {
       case "author":
-        whereClauses.push("r.authors LIKE ?");
+        whereClauses.push("r.authors LIKE ? COLLATE NOCASE");
         params.push(`%${f.value}%`);
         break;
       case "status":
@@ -238,10 +244,14 @@ export function search(
         whereClauses.push("r.wg = ?");
         params.push(f.value);
         break;
-      case "year":
-        whereClauses.push("r.date_year = ?");
-        params.push(parseInt(f.value));
+      case "year": {
+        const year = parseInt(f.value);
+        if (!isNaN(year)) {
+          whereClauses.push("r.date_year = ?");
+          params.push(year);
+        }
         break;
+      }
       case "stream":
         whereClauses.push("UPPER(r.stream) LIKE ?");
         params.push(`%${f.value.toUpperCase()}%`);
@@ -321,9 +331,12 @@ export function search(
     total: number;
   };
 
+  const numbers = rows.map((r) => r.number as number);
+  const relations = batchLoadRelations(db, numbers);
+
   return {
     results: rows.map((row) => ({
-      meta: rowToMeta(db, row),
+      meta: rowToMetaWithRelations(row, relations.get(row.number as number)),
       rank: (row.rank as number) ?? 0,
     })),
     total: countRow.total,
@@ -331,6 +344,87 @@ export function search(
 }
 
 // --- Helpers ---
+
+interface RfcRelations {
+  obsoletes: number[];
+  obsoletedBy: number[];
+  updates: number[];
+  updatedBy: number[];
+}
+
+function emptyRelations(): RfcRelations {
+  return { obsoletes: [], obsoletedBy: [], updates: [], updatedBy: [] };
+}
+
+function batchLoadRelations(
+  db: Database,
+  numbers: number[],
+): Map<number, RfcRelations> {
+  const result = new Map<number, RfcRelations>();
+  if (numbers.length === 0) return result;
+
+  for (const n of numbers) result.set(n, emptyRelations());
+
+  const placeholders = numbers.map(() => "?").join(",");
+  const numSet = new Set(numbers);
+
+  const sourceRows = db
+    .prepare(
+      `SELECT source, target, type FROM rfc_relations WHERE source IN (${placeholders})`,
+    )
+    .all(...numbers) as { source: number; target: number; type: string }[];
+
+  for (const r of sourceRows) {
+    const rels = result.get(r.source)!;
+    if (r.type === "obsoletes") rels.obsoletes.push(r.target);
+    else if (r.type === "updates") rels.updates.push(r.target);
+  }
+
+  const targetRows = db
+    .prepare(
+      `SELECT source, target, type FROM rfc_relations WHERE target IN (${placeholders})`,
+    )
+    .all(...numbers) as { source: number; target: number; type: string }[];
+
+  for (const r of targetRows) {
+    if (!numSet.has(r.target)) continue;
+    const rels = result.get(r.target)!;
+    if (r.type === "obsoletes") rels.obsoletedBy.push(r.source);
+    else if (r.type === "updates") rels.updatedBy.push(r.source);
+  }
+
+  return result;
+}
+
+function rowToMetaWithRelations(
+  row: Record<string, unknown>,
+  relations?: RfcRelations,
+): RfcMeta {
+  const rels = relations ?? emptyRelations();
+  return {
+    number: row.number as number,
+    title: row.title as string,
+    authors: JSON.parse((row.authors as string) || "[]"),
+    date: {
+      month: (row.date_month as string) || "",
+      year: (row.date_year as number) || 0,
+    },
+    pageCount: (row.page_count as number) || 0,
+    status: (row.status as RfcMeta["status"]) || "UNKNOWN",
+    stream: (row.stream as RfcMeta["stream"]) || "Legacy",
+    keywords: JSON.parse((row.keywords as string) || "[]"),
+    abstract: (row.abstract as string) || undefined,
+    obsoletes: rels.obsoletes,
+    obsoletedBy: rels.obsoletedBy,
+    updates: rels.updates,
+    updatedBy: rels.updatedBy,
+    wg: (row.wg as string) || undefined,
+    area: (row.area as string) || undefined,
+    errata: (row.errata_url as string) || undefined,
+    doi: (row.doi as string) || "",
+    formats: JSON.parse((row.formats as string) || "[]"),
+  };
+}
 
 function rowToMeta(db: Database, row: Record<string, unknown>): RfcMeta {
   const number = row.number as number;

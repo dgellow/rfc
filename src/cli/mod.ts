@@ -7,6 +7,7 @@ import { listCachedRfcs } from "../data/db.ts";
 import { fetchRfcToFile } from "../data/fetch.ts";
 import { ensureIndex } from "../data/index.ts";
 import { c } from "./color.ts";
+import denoConfig from "../../deno.json" with { type: "json" };
 
 const HELP = `${c.boldCyan("rfc")} ${
   c.dim("—")
@@ -31,8 +32,9 @@ ${c.boldWhite("Search syntax:")}
   rfc search author:fielding HTTP  ${c.dim("Combined filters")}
 
 ${c.boldWhite("Options:")}
-  --help, -h    Show this help
-  --no-color    Disable colored output
+  --help, -h       Show this help
+  --version, -V    Show version
+  --no-color       Disable colored output
 `;
 
 export async function runCli(args: string[]): Promise<boolean> {
@@ -44,6 +46,11 @@ export async function runCli(args: string[]): Promise<boolean> {
 
   if (first === "--help" || first === "-h") {
     console.log(HELP);
+    return true;
+  }
+
+  if (first === "--version" || first === "-V") {
+    console.log(`rfc ${denoConfig.version}`);
     return true;
   }
 

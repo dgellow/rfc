@@ -576,3 +576,141 @@ Deno.test("browse: ? toggles help", () => {
     teardown();
   }
 });
+
+// Empty results edge cases
+
+Deno.test("browse: j with empty results does not crash", () => {
+  setup();
+  try {
+    const driver = makeDriver({ results: [], totalMatches: 0 });
+    assertEquals(state.selectedIndex, 0);
+    driver.sendKey("j");
+    assertEquals(state.selectedIndex, 0);
+  } finally {
+    teardown();
+  }
+});
+
+Deno.test("browse: k with empty results does not crash", () => {
+  setup();
+  try {
+    const driver = makeDriver({ results: [], totalMatches: 0 });
+    driver.sendKey("k");
+    assertEquals(state.selectedIndex, 0);
+  } finally {
+    teardown();
+  }
+});
+
+Deno.test("browse: g with empty results does not crash", () => {
+  setup();
+  try {
+    const driver = makeDriver({ results: [], totalMatches: 0 });
+    driver.sendKey("g");
+    assertEquals(state.selectedIndex, 0);
+  } finally {
+    teardown();
+  }
+});
+
+Deno.test("browse: G with empty results does not crash", () => {
+  setup();
+  try {
+    const driver = makeDriver({ results: [], totalMatches: 0 });
+    driver.sendKey("G");
+    assertEquals(state.selectedIndex, 0);
+  } finally {
+    teardown();
+  }
+});
+
+Deno.test("browse: G goes to last item", () => {
+  setup();
+  try {
+    const driver = makeDriver({ selectedIndex: 0 });
+    driver.sendKey("G");
+    assertEquals(state.selectedIndex, 2);
+  } finally {
+    teardown();
+  }
+});
+
+Deno.test("browse: Shift+Tab cycles filter backward", () => {
+  setup();
+  try {
+    const driver = makeDriver();
+    assertEquals(state.statusFilter, null);
+    // Shift+Tab from "ALL" should wrap to last filter
+    driver.sendKey("Tab", { shift: true });
+    assertEquals(state.statusFilter, "HISTORIC");
+    driver.sendKey("Tab", { shift: true });
+    assertEquals(state.statusFilter, "EXPERIMENTAL");
+  } finally {
+    teardown();
+  }
+});
+
+Deno.test("reader: content search with no matches", () => {
+  setup();
+  try {
+    const lines = Array.from({ length: 20 }, (_, i) => `Line ${i}`);
+    const driver = makeDriver({
+      screen: "reader",
+      lines,
+      scrollY: 0,
+      currentRfc: 9999,
+      currentTitle: "Test",
+    });
+    driver.sendKey("/");
+    driver.sendKey("z");
+    driver.sendKey("z");
+    driver.sendKey("z");
+    driver.sendKey("Enter");
+    assertEquals(state.contentSearchActive, false);
+    assertEquals(state.contentMatches.length, 0);
+    assertEquals(state.scrollY, 0);
+  } finally {
+    teardown();
+  }
+});
+
+Deno.test("reader: n/N navigates matches", () => {
+  setup();
+  try {
+    const lines = Array.from(
+      { length: 100 },
+      (_, i) => i % 25 === 0 ? "target line" : `Line ${i}`,
+    );
+    const driver = makeDriver({
+      screen: "reader",
+      lines,
+      scrollY: 0,
+      currentRfc: 9999,
+      currentTitle: "Test",
+    });
+    // Search for "target"
+    driver.sendKey("/");
+    for (const ch of "target") driver.sendKey(ch);
+    driver.sendKey("Enter");
+    assertEquals(state.contentMatches.length, 4); // lines 0, 25, 50, 75
+    assertEquals(state.contentMatchIndex, 0);
+
+    // n goes to next match
+    driver.sendKey("n");
+    assertEquals(state.contentMatchIndex, 1);
+    driver.sendKey("n");
+    assertEquals(state.contentMatchIndex, 2);
+
+    // N goes to previous match
+    driver.sendKey("N");
+    assertEquals(state.contentMatchIndex, 1);
+
+    // N wraps around from first to last
+    driver.sendKey("N");
+    assertEquals(state.contentMatchIndex, 0);
+    driver.sendKey("N");
+    assertEquals(state.contentMatchIndex, 3);
+  } finally {
+    teardown();
+  }
+});

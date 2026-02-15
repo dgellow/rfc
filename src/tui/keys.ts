@@ -82,12 +82,13 @@ function handleBrowseKey(
     return { ...state, searchActive: true };
   }
 
-  // Navigation
+  // Navigation — all guards check for empty results
   if (
     isKey(event, Keys.Down) ||
     isKey(event, "j") ||
     (state.keymap === "emacs" && isKey(event, "n", { ctrl: true }))
   ) {
+    if (state.results.length === 0) return;
     const next = Math.min(state.selectedIndex + 1, state.results.length - 1);
     return adjustListOffset({ ...state, selectedIndex: next }, listHeight);
   }
@@ -97,6 +98,7 @@ function handleBrowseKey(
     isKey(event, "k") ||
     (state.keymap === "emacs" && isKey(event, "p", { ctrl: true }))
   ) {
+    if (state.results.length === 0) return;
     const prev = Math.max(state.selectedIndex - 1, 0);
     return adjustListOffset({ ...state, selectedIndex: prev }, listHeight);
   }
@@ -106,6 +108,7 @@ function handleBrowseKey(
     isKey(event, Keys.PageDown) ||
     isKey(event, "d", { ctrl: true })
   ) {
+    if (state.results.length === 0) return;
     const next = Math.min(
       state.selectedIndex + listHeight,
       state.results.length - 1,
@@ -116,16 +119,19 @@ function handleBrowseKey(
     isKey(event, Keys.PageUp) ||
     isKey(event, "u", { ctrl: true })
   ) {
+    if (state.results.length === 0) return;
     const prev = Math.max(state.selectedIndex - listHeight, 0);
     return adjustListOffset({ ...state, selectedIndex: prev }, listHeight);
   }
 
   // Top/bottom
   if (isKey(event, "g")) {
+    if (state.results.length === 0) return;
     return adjustListOffset({ ...state, selectedIndex: 0 }, listHeight);
   }
   if (isKey(event, "G")) {
-    const last = Math.max(0, state.results.length - 1);
+    if (state.results.length === 0) return;
+    const last = state.results.length - 1;
     return adjustListOffset({ ...state, selectedIndex: last }, listHeight);
   }
 
@@ -172,11 +178,12 @@ function handleBrowseKey(
     });
   }
 
-  // Tab - cycle status filter
-  if (isKey(event, Keys.Tab)) {
+  // Shift-Tab - cycle filter backwards (must be checked before Tab)
+  if (isKey(event, Keys.Tab, { shift: true })) {
     const currentIdx = STATUS_FILTERS.indexOf(state.statusFilter);
-    const nextIdx = (currentIdx + 1) % STATUS_FILTERS.length;
-    const newFilter = STATUS_FILTERS[nextIdx];
+    const prevIdx = (currentIdx - 1 + STATUS_FILTERS.length) %
+      STATUS_FILTERS.length;
+    const newFilter = STATUS_FILTERS[prevIdx];
     return adjustListOffset(
       runSearch({
         ...state,
@@ -188,12 +195,11 @@ function handleBrowseKey(
     );
   }
 
-  // Shift-Tab - cycle filter backwards
-  if (isKey(event, Keys.Tab, { shift: true })) {
+  // Tab - cycle status filter
+  if (isKey(event, Keys.Tab)) {
     const currentIdx = STATUS_FILTERS.indexOf(state.statusFilter);
-    const prevIdx = (currentIdx - 1 + STATUS_FILTERS.length) %
-      STATUS_FILTERS.length;
-    const newFilter = STATUS_FILTERS[prevIdx];
+    const nextIdx = (currentIdx + 1) % STATUS_FILTERS.length;
+    const newFilter = STATUS_FILTERS[nextIdx];
     return adjustListOffset(
       runSearch({
         ...state,
@@ -331,7 +337,13 @@ function handleReaderKey(
         }
       }
     }
-    return { ...state, screen: "search", showInfo: false };
+    return {
+      ...state,
+      screen: "search",
+      showInfo: false,
+      contentMatches: [],
+      contentMatchIndex: 0,
+    };
   }
 
   // Quit
@@ -552,8 +564,10 @@ async function openRfc(
   number: number,
   title: string,
 ): Promise<void> {
+  const generation = ++_openRfcGeneration;
   try {
     const text = await fetchRfc(number);
+    if (generation !== _openRfcGeneration) return;
     const lines = prepareRfcText(text);
 
     let rfcTitle = title;
@@ -566,6 +580,7 @@ async function openRfc(
     }
 
     asyncUpdate((s) => {
+      if (generation !== _openRfcGeneration) return s;
       const newState: TuiState = {
         ...s,
         lines,
@@ -576,11 +591,14 @@ async function openRfc(
       return { ...newState, visibleRefs: collectVisibleRefs(newState) };
     });
   } catch (e) {
-    asyncUpdate((s) => ({
-      ...s,
-      loading: false,
-      error: (e as Error).message,
-    }));
+    asyncUpdate((s) => {
+      if (generation !== _openRfcGeneration) return s;
+      return {
+        ...s,
+        loading: false,
+        error: (e as Error).message,
+      };
+    });
   }
 }
 
@@ -596,6 +614,9 @@ export function setAsyncUpdater(
 function asyncUpdate(fn: (s: TuiState) => TuiState): void {
   _asyncUpdate?.(fn);
 }
+
+// Generation counter: prevents stale async openRfc updates from applying
+let _openRfcGeneration = 0;
 
 // Synchronous db access
 import type { Database } from "@db/sqlite";

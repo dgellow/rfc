@@ -129,7 +129,16 @@ export function renderSearchScreen(
       : `${state.totalMatches.toLocaleString()}`
     : "";
 
-  const resultList: Component = state.results.length === 0
+  const resultList: Component = state.error
+    ? {
+      render(canvas, rect) {
+        const msgY = Math.floor(rect.height / 3);
+        canvas.text(rect.x + 2, rect.y + msgY, `Error: ${state.error}`, {
+          fg: colors.fg.red,
+        });
+      },
+    }
+    : state.results.length === 0
     ? {
       render(canvas, rect) {
         const msg = state.query ? "No results" : "/ to search";
