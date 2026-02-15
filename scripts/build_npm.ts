@@ -31,11 +31,41 @@ try {
 } catch { /* doesn't exist */ }
 
 const allPlatforms = [
-  { target: "x86_64-unknown-linux-gnu", pkg: "@dgellow/rfc-linux-x64", os: "linux", cpu: "x64", bin: "rfc" },
-  { target: "aarch64-unknown-linux-gnu", pkg: "@dgellow/rfc-linux-arm64", os: "linux", cpu: "arm64", bin: "rfc" },
-  { target: "x86_64-apple-darwin", pkg: "@dgellow/rfc-darwin-x64", os: "darwin", cpu: "x64", bin: "rfc" },
-  { target: "aarch64-apple-darwin", pkg: "@dgellow/rfc-darwin-arm64", os: "darwin", cpu: "arm64", bin: "rfc" },
-  { target: "x86_64-pc-windows-msvc", pkg: "@dgellow/rfc-win32-x64", os: "win32", cpu: "x64", bin: "rfc.exe" },
+  {
+    target: "x86_64-unknown-linux-gnu",
+    pkg: "@dgellow/rfc-linux-x64",
+    os: "linux",
+    cpu: "x64",
+    bin: "rfc",
+  },
+  {
+    target: "aarch64-unknown-linux-gnu",
+    pkg: "@dgellow/rfc-linux-arm64",
+    os: "linux",
+    cpu: "arm64",
+    bin: "rfc",
+  },
+  {
+    target: "x86_64-apple-darwin",
+    pkg: "@dgellow/rfc-darwin-x64",
+    os: "darwin",
+    cpu: "x64",
+    bin: "rfc",
+  },
+  {
+    target: "aarch64-apple-darwin",
+    pkg: "@dgellow/rfc-darwin-arm64",
+    os: "darwin",
+    cpu: "arm64",
+    bin: "rfc",
+  },
+  {
+    target: "x86_64-pc-windows-msvc",
+    pkg: "@dgellow/rfc-win32-x64",
+    os: "win32",
+    cpu: "x64",
+    bin: "rfc.exe",
+  },
 ];
 
 const platforms = args.platform
@@ -54,9 +84,12 @@ for (const platform of platforms) {
   console.log(`Compiling for ${platform.target}...`);
   const cmd = new Deno.Command("deno", {
     args: [
-      "compile", "-A",
-      "--target", platform.target,
-      "--output", `${pkgDir}/bin/${platform.bin}`,
+      "compile",
+      "-A",
+      "--target",
+      platform.target,
+      "--output",
+      `${pkgDir}/bin/${platform.bin}`,
       "./main.ts",
     ],
     stdout: "inherit",
@@ -71,15 +104,23 @@ for (const platform of platforms) {
 
   await Deno.writeTextFile(
     `${pkgDir}/package.json`,
-    JSON.stringify({
-      name: platform.pkg,
-      version,
-      description: `Platform binary for @dgellow/rfc (${platform.os}-${platform.cpu})`,
-      license: "MIT",
-      repository: { type: "git", url: "git+https://github.com/dgellow/rfc.git" },
-      os: [platform.os],
-      cpu: [platform.cpu],
-    }, null, 2) + "\n",
+    JSON.stringify(
+      {
+        name: platform.pkg,
+        version,
+        description:
+          `Platform binary for @dgellow/rfc (${platform.os}-${platform.cpu})`,
+        license: "MIT",
+        repository: {
+          type: "git",
+          url: "git+https://github.com/dgellow/rfc.git",
+        },
+        os: [platform.os],
+        cpu: [platform.cpu],
+      },
+      null,
+      2,
+    ) + "\n",
   );
 
   const stat = await Deno.stat(`${pkgDir}/bin/${platform.bin}`);
@@ -91,7 +132,9 @@ console.log("\nCreating main @dgellow/rfc package...");
 const mainDir = "./npm/rfc";
 await Deno.mkdir(mainDir, { recursive: true });
 
-await Deno.writeTextFile(`${mainDir}/rfc.js`, `#!/usr/bin/env node
+await Deno.writeTextFile(
+  `${mainDir}/rfc.js`,
+  `#!/usr/bin/env node
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -137,29 +180,37 @@ const child = spawn(binPath, process.argv.slice(2), { stdio: "inherit" });
 child.on("error", (err) => { console.error(\`Failed to start rfc: \${err.message}\`); process.exit(1); });
 for (const sig of Object.keys(os.constants.signals)) { try { process.on(sig, () => child.kill(sig)); } catch {} }
 child.on("exit", (code, signal) => { if (signal) process.kill(process.pid, signal); else process.exit(code ?? 0); });
-`);
+`,
+);
 
 await Deno.writeTextFile(
   `${mainDir}/package.json`,
-  JSON.stringify({
-    name: "@dgellow/rfc",
-    version,
-    description: "Read, search, and navigate IETF RFCs from your terminal",
-    license: "MIT",
-    repository: { type: "git", url: "git+https://github.com/dgellow/rfc.git" },
-    bugs: { url: "https://github.com/dgellow/rfc/issues" },
-    homepage: "https://github.com/dgellow/rfc#readme",
-    keywords: ["rfc", "ietf", "cli", "tui", "standards"],
-    bin: { rfc: "./rfc.js" },
-    files: ["rfc.js"],
-    optionalDependencies: {
-      "@dgellow/rfc-linux-x64": version,
-      "@dgellow/rfc-linux-arm64": version,
-      "@dgellow/rfc-darwin-x64": version,
-      "@dgellow/rfc-darwin-arm64": version,
-      "@dgellow/rfc-win32-x64": version,
+  JSON.stringify(
+    {
+      name: "@dgellow/rfc",
+      version,
+      description: "Read, search, and navigate IETF RFCs from your terminal",
+      license: "MIT",
+      repository: {
+        type: "git",
+        url: "git+https://github.com/dgellow/rfc.git",
+      },
+      bugs: { url: "https://github.com/dgellow/rfc/issues" },
+      homepage: "https://github.com/dgellow/rfc#readme",
+      keywords: ["rfc", "ietf", "cli", "tui", "standards"],
+      bin: { rfc: "./rfc.js" },
+      files: ["rfc.js"],
+      optionalDependencies: {
+        "@dgellow/rfc-linux-x64": version,
+        "@dgellow/rfc-linux-arm64": version,
+        "@dgellow/rfc-darwin-x64": version,
+        "@dgellow/rfc-darwin-arm64": version,
+        "@dgellow/rfc-win32-x64": version,
+      },
     },
-  }, null, 2) + "\n",
+    null,
+    2,
+  ) + "\n",
 );
 
 await Deno.copyFile("LICENSE", `${mainDir}/LICENSE`);

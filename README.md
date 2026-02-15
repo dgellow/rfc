@@ -41,7 +41,8 @@ rfc search status:standard wg:httpbis
 rfc search year:2022 TLS
 ```
 
-CLI output is colored by default. Respects `$NO_COLOR`. Use `--no-color` to disable.
+CLI output is colored by default. Respects `$NO_COLOR`. Use `--no-color` to
+disable.
 
 ### TUI
 
@@ -57,7 +58,7 @@ Supports vim (default) and emacs keybindings. Set `RFC_KEYMAP=emacs`.
 ### Library
 
 ```ts
-import { ensureIndex, search, getRfc } from "jsr:@dgellow/rfc";
+import { ensureIndex, getRfc, search } from "jsr:@dgellow/rfc";
 
 const db = await ensureIndex();
 const { results } = search(db, "HTTP semantics", { orderBy: "relevance" });
