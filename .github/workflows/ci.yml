@@ -22,11 +22,5 @@ jobs:
         with:
           cache: true
 
-      - name: Check formatting
-        run: deno fmt --check
-
       - name: Lint
-        run: deno lint
-
-      - name: Type check
-        run: deno check main.ts mod.ts
+        run: ./scripts/lint

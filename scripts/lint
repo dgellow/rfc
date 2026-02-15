@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-deno lint "$@"
+deno fmt --check
+deno check
+deno lint
