@@ -21,7 +21,7 @@
   "tasks": {
     "dev": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-ffi main.ts",
     "install": "deno install -g -A --name rfc main.ts",
-    "test": "deno test --allow-ffi --allow-read --allow-write --allow-env"
+    "test": "deno test --allow-ffi --allow-read --allow-write --allow-env --allow-net"
   },
   "imports": {
     "@dgellow/weew": "jsr:@dgellow/weew@^0.2.0",

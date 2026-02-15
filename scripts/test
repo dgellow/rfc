@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-deno test --allow-ffi --allow-read --allow-write --allow-env
+# --allow-net: @db/sqlite downloads libsqlite3 native library on first run
+deno test --allow-ffi --allow-read --allow-write --allow-env --allow-net
