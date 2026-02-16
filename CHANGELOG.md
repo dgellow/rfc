@@ -1,12 +1,18 @@
 # Changelog
 
+## 0.0.5
+
+### Chores
+
+- upgrade to weew 0.4.0: AppContext → RunControl
+
 ## 0.0.4
 
 ### Bug Fixes
 
 - batch relation queries, race conditions, navigation edge cases
   <details><summary>Details</summary>
-  - Batch-load relations in search (2 queries instead of 4×N), add indexes
+  - Batch-load relations in search (2 queries instead of 4ÃN), add indexes
   - Add generation counter to prevent stale async openRfc updates
   - Guard all navigation keys against empty results
   - Fix Shift+Tab swallowed by Tab (check order)
