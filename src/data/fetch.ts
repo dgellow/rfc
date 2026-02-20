@@ -19,8 +19,7 @@ export async function fetchRfc(number: number): Promise<string> {
     // Not on disk, fetch from network
   }
 
-  const padded = String(number).padStart(4, "0");
-  const url = `${RFC_BASE_URL}/rfc${padded}.txt`;
+  const url = `${RFC_BASE_URL}/rfc${number}.txt`;
 
   console.error(`Fetching RFC ${number}...`);
   const resp = await fetch(url);
