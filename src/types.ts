@@ -38,7 +38,10 @@ export interface RfcRelation {
 }
 
 export interface SearchResult {
-  meta: RfcMeta;
+  number: number;
+  title: string;
+  status: RfcStatus;
+  year: number;
+  obsoletedBy: number[];
   rank: number;
-  snippet?: string;
 }

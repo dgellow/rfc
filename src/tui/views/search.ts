@@ -17,10 +17,12 @@ const STATUS_LABELS = [
   { key: null, label: "ALL" },
   { key: "INTERNET STANDARD", label: "STD" },
   { key: "PROPOSED STANDARD", label: "PROPOSED" },
+  { key: "DRAFT STANDARD", label: "DRAFT" },
   { key: "BEST CURRENT PRACTICE", label: "BCP" },
   { key: "INFORMATIONAL", label: "INFO" },
   { key: "EXPERIMENTAL", label: "EXP" },
   { key: "HISTORIC", label: "HIST" },
+  { key: "UNKNOWN", label: "OTHER" },
 ];
 
 function sortLabel(order: SortOrder): string {
@@ -173,7 +175,7 @@ export function renderSearchScreen(
   }
 
   // Title with count
-  const title = countText ? `rfc \u2014 ${countText}` : "rfc";
+  const title = countText ? `rfc \u2014 ${countText} docs` : "rfc";
 
   return Column([
     {
@@ -246,16 +248,15 @@ function renderResultItem(
 ): Component {
   return {
     render(canvas, rect) {
-      const meta = result.meta;
-      const obsoleted = meta.obsoletedBy.length > 0;
+      const obsoleted = result.obsoletedBy.length > 0;
       const titleMaxWidth = rect.width - 2 - 10 - 18 - 6 - 4;
-      let title = meta.title;
+      let title = result.title;
       if (title.length > titleMaxWidth) {
         title = title.slice(0, titleMaxWidth - 1) + "\u2026";
       }
-      const numberStr = String(meta.number);
-      const status = shortStatus(meta.status);
-      const year = meta.date.year ? String(meta.date.year) : "    ";
+      const numberStr = String(result.number);
+      const status = shortStatus(result.status);
+      const year = result.year ? String(result.year) : "    ";
 
       if (isSelected) {
         canvas.fill(rect.x, rect.y, rect.width, 1, " ", {
@@ -304,7 +305,7 @@ function renderResultItem(
 
       const statusX = rect.x + rect.width - 18;
       canvas.text(statusX, rect.y, status.padStart(10), {
-        fg: statusColor(meta.status),
+        fg: statusColor(result.status),
         bg: isSelected ? colors.bg.hex("#1a3a5c") : undefined,
         style: "\x1b[2m",
       });

@@ -8,7 +8,7 @@ export function renderInfoPanel(
   db: Database | null,
 ): Component | null {
   const number = state.screen === "search"
-    ? state.results[state.selectedIndex]?.meta.number
+    ? state.results[state.selectedIndex]?.number
     : state.currentRfc;
 
   if (!number || !db) return null;

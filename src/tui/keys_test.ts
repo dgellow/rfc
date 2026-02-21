@@ -12,25 +12,14 @@ import type { SearchResult } from "../types.ts";
 function makeResult(
   number: number,
   title: string,
-  status: SearchResult["meta"]["status"] = "PROPOSED STANDARD",
+  status: SearchResult["status"] = "PROPOSED STANDARD",
 ): SearchResult {
   return {
-    meta: {
-      number,
-      title,
-      authors: ["Test Author"],
-      date: { month: "January", year: 2024 },
-      pageCount: 10,
-      status,
-      stream: "IETF",
-      keywords: [],
-      obsoletes: [],
-      obsoletedBy: [],
-      updates: [],
-      updatedBy: [],
-      doi: "",
-      formats: ["ASCII"],
-    },
+    number,
+    title,
+    status,
+    year: 2024,
+    obsoletedBy: [],
     rank: 0,
   };
 }
@@ -635,6 +624,70 @@ Deno.test("browse: Shift+Tab cycles filter backward", () => {
     assertEquals(state.statusFilter, "HISTORIC");
     driver.sendKey("Tab", { shift: true });
     assertEquals(state.statusFilter, "EXPERIMENTAL");
+  } finally {
+    teardown();
+  }
+});
+
+// Live search
+
+Deno.test("search: results update on submit, not while typing", () => {
+  setup();
+  try {
+    const driver = makeDriver({
+      results: [],
+      totalMatches: 0,
+      searchActive: true,
+    });
+    assertEquals(state.results.length, 0);
+
+    // Typing does not trigger search
+    driver.sendKey("t");
+    assertEquals(state.query, "t");
+    assertEquals(state.results.length, 0);
+
+    driver.sendKey("e");
+    assertEquals(state.query, "te");
+    assertEquals(state.results.length, 0);
+
+    driver.sendKey("s");
+    assertEquals(state.query, "tes");
+    assertEquals(state.results.length, 0);
+
+    driver.sendKey("t");
+    assertEquals(state.query, "test");
+    assertEquals(state.results.length, 0);
+
+    // Enter submits — results appear
+    driver.sendKey("Enter");
+    assertEquals(state.searchActive, false);
+    assertEquals(state.results.length, 1);
+    assertEquals(state.results[0].number, 9999);
+    assertEquals(state.results[0].title, "Test Protocol");
+  } finally {
+    teardown();
+  }
+});
+
+Deno.test("search: obsoletedBy is populated from relations", () => {
+  setup();
+  try {
+    // Add a relation: RFC 9999 is obsoleted by RFC 9998
+    db.exec(
+      "INSERT INTO rfc_relations (source, target, type) VALUES (9998, 9999, 'obsoletes')",
+    );
+
+    const driver = makeDriver({
+      results: [],
+      totalMatches: 0,
+      searchActive: true,
+    });
+
+    driver.type("test");
+    driver.sendKey("Enter");
+    assertEquals(state.results.length, 1);
+    assertEquals(state.results[0].number, 9999);
+    assertEquals(state.results[0].obsoletedBy, [9998]);
   } finally {
     teardown();
   }

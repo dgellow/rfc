@@ -21,29 +21,30 @@ export async function searchCommand(query: string): Promise<void> {
   const statusWidth = 14;
   const gapWidth = 4;
 
-  for (const { meta } of results) {
-    const num = c.boldCyan(`RFC ${meta.number}`);
-    const numPad = `RFC ${meta.number}`.length;
+  for (const r of results) {
+    const num = c.boldCyan(`RFC ${r.number}`);
+    const numPad = `RFC ${r.number}`.length;
 
-    const year = meta.date.year ? c.gray(String(meta.date.year)) : "    ";
+    const year = r.year ? c.gray(String(r.year)) : "    ";
 
-    const colorFn = statusColor(meta.status);
-    const statusShort = shortStatus(meta.status);
+    const colorFn = statusColor(r.status);
+    const statusShort = shortStatus(r.status);
     const status = colorFn(statusShort);
     const statusPad = statusShort.length;
 
     const titleWidth = cols - numWidth - yearWidth - statusWidth - gapWidth;
-    const rawTitle = formatTitle(meta.title, meta.obsoletedBy);
-    const title = meta.obsoletedBy.length > 0
-      ? c.strikethrough(c.dim(truncate(meta.title, titleWidth - 12))) +
-        c.dim(` (obsoleted)`)
-      : truncate(rawTitle, titleWidth);
+    const title = r.obsoletedBy.length > 0
+      ? c.strikethrough(c.dim(truncate(r.title, titleWidth - 20))) +
+        c.dim(
+          ` (obsoleted by ${r.obsoletedBy.map((n) => `RFC ${n}`).join(", ")})`,
+        )
+      : truncate(r.title, titleWidth);
 
     // Pad using invisible widths
     const numStr = num + " ".repeat(Math.max(0, numWidth - numPad));
     const statusStr = " ".repeat(Math.max(0, statusWidth - statusPad)) +
       status;
-    const yearStr = " " + (meta.date.year ? year : "    ");
+    const yearStr = " " + (r.year ? year : "    ");
 
     console.log(`${numStr} ${title.padEnd(titleWidth)}${statusStr}${yearStr}`);
   }
@@ -52,13 +53,6 @@ export async function searchCommand(query: string): Promise<void> {
     ? `${results.length} of ${total} results (showing top matches)`
     : `${total} result${total === 1 ? "" : "s"}`;
   console.log(c.dim(`\n${countMsg}`));
-}
-
-function formatTitle(title: string, obsoletedBy: number[]): string {
-  if (obsoletedBy.length > 0) {
-    return `${title} (obsoleted by ${obsoletedBy.join(", ")})`;
-  }
-  return title;
 }
 
 function shortStatus(status: string): string {

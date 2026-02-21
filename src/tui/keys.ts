@@ -182,12 +182,12 @@ function handleBrowseKey(
     if (state.results.length === 0) return;
     const result = state.results[state.selectedIndex];
     if (!result) return;
-    openRfc(result.meta.number, result.meta.title);
+    openRfc(result.number, result.title);
     return {
       ...state,
       screen: "reader",
-      currentRfc: result.meta.number,
-      currentTitle: result.meta.title,
+      currentRfc: result.number,
+      currentTitle: result.title,
       loading: true,
       scrollY: 0,
       contentSearch: "",
@@ -301,16 +301,11 @@ function handleSearchInput(
   const input = TextInput({ value: state.query, cursorPos: state.cursorPos });
   const update = input.handleKey(event);
   if (update) {
-    if (update.value !== state.query) {
-      return runSearch({
-        ...state,
-        query: update.value,
-        cursorPos: update.cursorPos,
-        selectedIndex: 0,
-        listOffset: 0,
-      });
-    }
-    return { ...state, cursorPos: update.cursorPos };
+    return {
+      ...state,
+      query: update.value,
+      cursorPos: update.cursorPos,
+    };
   }
 
   return;
