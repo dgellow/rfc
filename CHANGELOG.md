@@ -1,10 +1,20 @@
 # Changelog
 
+## 0.0.6
+
+### Chores
+
+- add universal navigation keys: n/p, u/d, t/b
+
+### search
+
+- lightweight results, submit-on-enter, add missing status filters
+
 ## 0.0.5
 
 ### Chores
 
-- upgrade to weew 0.4.0: AppContext → RunControl
+- upgrade to weew 0.4.0: AppContext â RunControl
 
 ## 0.0.4
 
@@ -12,7 +22,7 @@
 
 - batch relation queries, race conditions, navigation edge cases
   <details><summary>Details</summary>
-  - Batch-load relations in search (2 queries instead of 4ÃN), add indexes
+  - Batch-load relations in search (2 queries instead of 4ÃÂN), add indexes
   - Add generation counter to prevent stale async openRfc updates
   - Guard all navigation keys against empty results
   - Fix Shift+Tab swallowed by Tab (check order)
