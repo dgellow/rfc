@@ -166,12 +166,9 @@ export function renderSearchScreen(
   let hints: string;
   if (state.searchActive) {
     hints = "Enter confirm  Esc cancel";
-  } else if (state.keymap === "vim") {
-    hints =
-      "j/k \u2195  Enter open  / search  s sort  Tab filter  i info  ? help  K keymap  q quit";
   } else {
     hints =
-      "C-n/C-p \u2195  Enter open  C-s search  s sort  Tab filter  i info  ? help  K keymap  C-c quit";
+      "n/p \u2195  u/d page  t/b jump  Enter open  / search  s sort  Tab filter  i info  ? help  q quit";
   }
 
   // Title with count

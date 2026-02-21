@@ -182,9 +182,8 @@ export function renderReaderScreen(
 
   const searchKey = state.keymap === "vim" ? "/" : "C-s";
   const matchHint = state.contentMatches.length > 0 ? "  n/p match" : "";
-  const hints = state.keymap === "vim"
-    ? `j/k \u2195  Ctrl-d/u \u21c5  ${searchKey} search${matchHint}  i info  ? help  K keymap  q back`
-    : `C-n/C-p \u2195  C-v/M-v \u21c5  ${searchKey} search${matchHint}  i info  ? help  K keymap  C-g back`;
+  const hints =
+    `n/p \u2195  u/d page  t/b jump  ${searchKey} search${matchHint}  i info  ? help  Esc back`;
 
   // Scrollbar
   const scrollbarComponent: Component = {

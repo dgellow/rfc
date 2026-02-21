@@ -85,6 +85,7 @@ function handleBrowseKey(
   // Navigation — all guards check for empty results
   if (
     isKey(event, Keys.Down) ||
+    isKey(event, "n") ||
     (state.keymap === "vim" && isKey(event, "j")) ||
     (state.keymap === "emacs" && isKey(event, "n", { ctrl: true }))
   ) {
@@ -95,6 +96,7 @@ function handleBrowseKey(
 
   if (
     isKey(event, Keys.Up) ||
+    isKey(event, "p") ||
     (state.keymap === "vim" && isKey(event, "k")) ||
     (state.keymap === "emacs" && isKey(event, "p", { ctrl: true }))
   ) {
@@ -106,7 +108,8 @@ function handleBrowseKey(
   // Page down/up
   if (
     isKey(event, Keys.PageDown) ||
-    isKey(event, "d", { ctrl: true })
+    isKey(event, "d", { ctrl: true }) ||
+    isKey(event, "d")
   ) {
     if (state.results.length === 0) return;
     const next = Math.min(
@@ -117,7 +120,8 @@ function handleBrowseKey(
   }
   if (
     isKey(event, Keys.PageUp) ||
-    isKey(event, "u", { ctrl: true })
+    isKey(event, "u", { ctrl: true }) ||
+    isKey(event, "u")
   ) {
     if (state.results.length === 0) return;
     const prev = Math.max(state.selectedIndex - listHeight, 0);
@@ -158,6 +162,7 @@ function handleBrowseKey(
 
   // Top/bottom
   if (
+    isKey(event, "t") ||
     (state.keymap === "vim" && isKey(event, "g")) ||
     (state.keymap === "emacs" && event.alt && isKey(event, "<"))
   ) {
@@ -165,6 +170,7 @@ function handleBrowseKey(
     return adjustListOffset({ ...state, selectedIndex: 0 }, listHeight);
   }
   if (
+    isKey(event, "b") ||
     (state.keymap === "vim" && isKey(event, "G")) ||
     (state.keymap === "emacs" && event.alt && isKey(event, ">"))
   ) {
@@ -395,7 +401,8 @@ function handleReaderKey(
   if (
     isKey(event, Keys.Down) ||
     (state.keymap === "vim" && isKey(event, "j")) ||
-    (state.keymap === "emacs" && isKey(event, "n", { ctrl: true }))
+    (state.keymap === "emacs" && isKey(event, "n", { ctrl: true })) ||
+    (isKey(event, "n") && state.contentMatches.length === 0)
   ) {
     const newScrollY = Math.min(state.scrollY + 1, maxScroll);
     return updateVisibleRefs({ ...state, scrollY: newScrollY, refIndex: -1 });
@@ -404,7 +411,8 @@ function handleReaderKey(
   if (
     isKey(event, Keys.Up) ||
     (state.keymap === "vim" && isKey(event, "k")) ||
-    (state.keymap === "emacs" && isKey(event, "p", { ctrl: true }))
+    (state.keymap === "emacs" && isKey(event, "p", { ctrl: true })) ||
+    (isKey(event, "p") && state.contentMatches.length === 0)
   ) {
     const newScrollY = Math.max(state.scrollY - 1, 0);
     return updateVisibleRefs({ ...state, scrollY: newScrollY, refIndex: -1 });
@@ -414,6 +422,7 @@ function handleReaderKey(
   const halfPage = Math.floor(viewportHeight / 2);
   if (
     isKey(event, "d", { ctrl: true }) ||
+    isKey(event, "d") ||
     (state.keymap === "emacs" && isKey(event, "v", { ctrl: true })) ||
     isKey(event, Keys.PageDown)
   ) {
@@ -423,6 +432,7 @@ function handleReaderKey(
 
   if (
     isKey(event, "u", { ctrl: true }) ||
+    isKey(event, "u") ||
     (state.keymap === "emacs" && event.alt && isKey(event, "v")) ||
     isKey(event, Keys.PageUp)
   ) {
@@ -431,16 +441,18 @@ function handleReaderKey(
   }
 
   // Top/bottom
-  if (state.keymap === "vim" && isKey(event, "g")) {
+  if (
+    isKey(event, "t") ||
+    (state.keymap === "vim" && isKey(event, "g")) ||
+    (state.keymap === "emacs" && event.alt && isKey(event, "<"))
+  ) {
     return updateVisibleRefs({ ...state, scrollY: 0, refIndex: -1 });
   }
-  if (state.keymap === "vim" && isKey(event, "G")) {
-    return updateVisibleRefs({ ...state, scrollY: maxScroll, refIndex: -1 });
-  }
-  if (state.keymap === "emacs" && event.alt && isKey(event, "<")) {
-    return updateVisibleRefs({ ...state, scrollY: 0, refIndex: -1 });
-  }
-  if (state.keymap === "emacs" && event.alt && isKey(event, ">")) {
+  if (
+    isKey(event, "b") ||
+    (state.keymap === "vim" && isKey(event, "G")) ||
+    (state.keymap === "emacs" && event.alt && isKey(event, ">"))
+  ) {
     return updateVisibleRefs({ ...state, scrollY: maxScroll, refIndex: -1 });
   }
 
